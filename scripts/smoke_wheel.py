@@ -18,6 +18,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--python',type=Path,required=True)
     args=parser.parse_args();python=str(args.python.absolute())
+    subprocess.run([python,'-m','sub2easy.updater','--help'],check=True,stdout=subprocess.DEVNULL)
     with tempfile.TemporaryDirectory(prefix='sub2easy-wheel-') as directory:
         root=Path(directory)
         env={**os.environ,'HOME':str(root),'XDG_DATA_HOME':str(root/'xdg')}

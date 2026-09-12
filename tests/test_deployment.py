@@ -741,7 +741,7 @@ class RealHTTPDeploymentTests(unittest.TestCase):
                         job=v.jobs()[0];self.assertEqual(job['state'],'succeeded',job)
                         self.assertTrue(remote[42]['schedulable']);self.assertEqual(remote[42]['group_ids'],[11,12])
                         self.assertEqual(remote[42]['extra'],{'codex_fingerprint_mode':'device'})
-                        self.assertEqual(client.get('/api/status').json()['version'],'0.6.0')
+                        self.assertEqual(client.get('/api/status').json()['version'],'0.7.0')
                         batch=client.get('/api/import/batch').json()
                         self.assertEqual(batch['counts'],{'succeeded':1})
                         self.assertEqual(batch['items'][0]['cloud_id'],42)

@@ -12,7 +12,7 @@ import tomllib
 import zipfile
 
 DIRECTORIES = {'sub2easy', 'tests', 'examples', 'docs', 'scripts', '.github'}
-FILES = {'README.md', 'LICENSE', 'SECURITY.md', 'CONTRIBUTING.md', 'CHANGELOG.md',
+FILES = {'README.md', 'AGENTS.md', 'LICENSE', 'SECURITY.md', 'CONTRIBUTING.md', 'CHANGELOG.md',
          'THIRD_PARTY_NOTICES.md', 'pyproject.toml', 'uv.lock', 'package.json',
          'package-lock.json', 'start.command', '.gitignore', '.gitattributes'}
 EXCLUDED_PARTS = {'__pycache__', '.pytest_cache', '.ruff_cache', 'node_modules'}
@@ -62,6 +62,8 @@ def inspect_bytes(name, raw):
             errors.append(f'{name}:{line}: {category}')
     for match in EMAIL.finditer(text):
         domain=match.group(1).lower()
+        # Canonical Git SSH transport user, not a person's contact address.
+        if match.group(0)=='git'+'@'+'github.com' and text[match.end():match.end()+1]==':':continue
         if not (domain.startswith('example.') or domain.endswith(('.invalid','.test','.example'))):
             errors.append(f'{name}:{text.count(chr(10),0,match.start())+1}: non-example email')
     return errors

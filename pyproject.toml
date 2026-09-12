@@ -1,6 +1,6 @@
 [project]
 name = "sub2easy"
-version = "0.6.0"
+version = "0.7.0"
 description = "Local account-pool operations console for sub2api"
 readme = "README.md"
 license = "MIT"
@@ -25,6 +25,7 @@ dependencies = [
 
 [project.scripts]
 sub2easy = "sub2easy.gui:main"
+sub2easy-update = "sub2easy.updater:main"
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]
@@ -36,7 +37,7 @@ packages = ["sub2easy"]
 [tool.hatch.build.targets.sdist]
 include = [
   "/sub2easy", "/tests", "/examples", "/docs", "/scripts", "/.github",
-  "/README.md", "/LICENSE", "/SECURITY.md", "/CONTRIBUTING.md", "/CHANGELOG.md",
+  "/README.md", "/AGENTS.md", "/LICENSE", "/SECURITY.md", "/CONTRIBUTING.md", "/CHANGELOG.md",
   "/THIRD_PARTY_NOTICES.md", "/pyproject.toml", "/uv.lock",
   "/package.json", "/package-lock.json", "/start.command", "/.gitignore", "/.gitattributes",
 ]

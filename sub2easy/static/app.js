@@ -31,6 +31,11 @@ const statuses = {
   active:['已上线','success'],retired:['已移测试组 · 不再修复',''],
 };
 const messages = {
+  UPDATE_CHECK_RUNNING:'版本检查正在进行，请稍候。',
+  UPDATE_CHECK_FAILED:'无法读取 GitHub 版本信息，请检查网络后重试。',
+  UPDATE_RATE_LIMITED:'GitHub 版本接口限流，稍后重试；无需在这里填写 GitHub Token。',
+  UPDATE_RESPONSE_INVALID:'GitHub 版本响应不符合预期，未生成更新命令。',
+  UPDATE_VERSION_INVALID:'远端版本号不符合支持的格式，未生成更新命令。',
   CONFIRM_RETIREMENT_TRANSFER:'请确认将符合条件的账号停调度并移入所选测试组。',
   TEAM_LOST_RETIRED:'团队授权未恢复，已移入测试组、停止调度并退出监控。不再尝试重登。',
   ACCOUNT_RETIRED:'该账号已进入测试组清理流程，不再授权、部署或开启自动监控。',
@@ -186,6 +191,7 @@ async function api(path, data, raw=false) {
 }
 async function action(button, fn) { if(button&&busyButtons.has(button))return;if(button){busyButtons.add(button);button.disabled=true;button.setAttribute('aria-busy','true');}foregroundActions++;try{await fn();}catch(e){toast(e.message);}finally{foregroundActions--;if(button){busyButtons.delete(button);button.disabled=false;button.removeAttribute('aria-busy');}if(unlocked)updateSelection();} }
 function clearLocalSession(){
+  $('nvt-setup-reminder').hidden=true;$('update-command').hidden=true;$('update-command').textContent='';
   sessionEpoch++;unlocked=false;state=null;selected.clear();usageById.clear();usageRevision=null;deploymentDraft=null;
   usageAttempts.clear();usageLoadingIds.clear();clearTimeout(usageLoadTimer);
   accountRenderKey='';jobRenderKey='';
@@ -461,6 +467,7 @@ function fillForms(scope='all'){
   if(!$('import-deploy-model').value)$('import-deploy-model').value=m.model_id||'';
 }
 function renderMonitor(){
+  renderNvtReminder();
   renderRetirement();
   const {config:cfg,runtime:r}=state.monitor;const managed=state.accounts.filter(a=>a.monitor?.enabled);
   $('pool-mode-tag').textContent=cfg.enabled?'AUTO 401':'MANUAL';
@@ -706,3 +713,22 @@ $('retirement-save').onclick=()=>action($('retirement-save'),async()=>{
   renderRetirement(true);toast('团队失效账号清理规则已保存。');
 });
 $('retirement-check').onclick=()=>action($('retirement-check'),async()=>{state.retirement=await api('retirement/check',{});await refresh();renderRetirement();});
+
+function renderNvtReminder(){
+  const s=state?.settings;if(!s)return;
+  const missing=!s.has_cookie,paused=!!s.connector_paused;
+  $('nvt-setup-reminder').hidden=!missing&&!paused;
+  $('nvt-reminder-title').textContent=missing?'尚未填写 NV 站 CK':'NV 站 CK / 授权连接器已暂停';
+  $('nvt-reminder-message').textContent=missing?'需要密码/2FA重授权或自动401修复时，请在“连接与模板”填写 scm_session Cookie（CK）。不要发到聊天或GitHub。仅Token导入仍可使用，但不等于完整自动重登可用。':'请在本地界面更新 NV 站 scm_session Cookie，并核对连接器的限流或会话错误；已保存不代表仍有效。';
+}
+$('nvt-reminder-configure').onclick=()=>{goto('settings');$('nvt-cookie').focus();};
+$('update-check').onclick=()=>action($('update-check'),async()=>{
+  $('update-status').textContent='正在检查官方 GitHub 版本…';$('update-command').hidden=true;$('update-command').textContent='';
+  try{
+    const r=await api('updates/check',{});
+    $('update-status').textContent=`当前 v${r.current_version} · GitHub main v${r.latest_version} · ${r.available?'发现可更新提交':'没有更新版本'} · ${r.commit.slice(0,8)}`;
+    if(/^https:\/\/github\.com\/Tuava\/Sub2Easy\/commit\/[a-f0-9]{40}$/.test(r.commit_url))$('update-link').href=r.commit_url;
+    if(r.available&&r.install_mode==='git'){$('update-command').textContent=r.update_command;$('update-command').hidden=false;}
+    else if(r.available)$('update-status').textContent+='。当前为wheel或ZIP安装：先备份数据，安装新版wheel或另建git clone，继续使用原data-dir。';
+  }catch(e){$('update-status').textContent=e.message;}
+});

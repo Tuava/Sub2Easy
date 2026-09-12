@@ -318,3 +318,27 @@ test('new installation keeps retirement disabled and requires transfer confirmat
   assert.equal(sent.group_id,90);
  }finally{t.close();}
 });
+
+test('missing NVT CK is an explicit persistent reminder with local settings entry',async()=>{
+ const t=await setup();try{
+  t.w.eval(`state.settings.has_cookie=false;renderMonitor();`);
+  const banner=t.w.document.querySelector('#nvt-setup-reminder');assert.equal(banner.hidden,false);
+  assert.match(banner.textContent,/NV 站 CK/);assert.match(banner.textContent,/scm_session/);
+  t.w.document.querySelector('#nvt-reminder-configure').click();
+  assert.equal(t.w.eval('page'),'settings');assert.equal(t.w.document.activeElement.id,'nvt-cookie');
+  t.w.eval(`state.settings.has_cookie=true;state.settings.connector_paused=false;renderMonitor();`);assert.equal(banner.hidden,true);
+  t.w.eval(`state.settings.connector_paused=true;renderMonitor();`);assert.equal(banner.hidden,false);assert.match(banner.textContent,/暂停/);
+  t.w.eval('clearLocalSession()');assert.equal(banner.hidden,true);
+ }finally{t.close();}
+});
+test('update check displays version and manual command without calling install',async()=>{
+ const t=await setup();try{
+  const original=t.w.fetch;const paths=[];
+  t.w.fetch=async(url,opts)=>{paths.push(url);if(url==='/api/updates/check')return {ok:true,json:async()=>({current_version:'0.7.0',latest_version:'0.8.0',available:true,commit:'a'.repeat(40),commit_url:'https://github.com/Tuava/Sub2Easy/commit/'+'a'.repeat(40),install_mode:'git',update_command:'uv run --locked sub2easy-update --apply --yes --data-dir ./data'})};return original(url,opts);};
+  t.w.document.querySelector('#update-check').click();await tick();
+  assert.match(t.w.document.querySelector('#update-status').textContent,/发现可更新提交/);
+  assert.equal(t.w.document.querySelector('#update-command').hidden,false);
+  assert.match(t.w.document.querySelector('#update-command').textContent,/--data-dir/);
+  assert.deepEqual(paths,['/api/updates/check']);
+ }finally{t.close();}
+});

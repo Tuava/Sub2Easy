@@ -12,6 +12,7 @@ import secrets
 import threading
 import time
 import webbrowser
+import shlex
 import re
 from urllib.parse import urlsplit, parse_qs
 
@@ -40,6 +41,7 @@ from sub2easy.import_workflow import ImportWorkflow
 from sub2easy.task_pool import TaskPool
 from sub2easy.retirement import RetirementService
 from sub2easy.runtime import default_data_dir, private_lock_file, write_private_launcher
+from sub2easy import updater
 
 
 STATIC = Path(__file__).with_name("static")
@@ -437,6 +439,20 @@ def create_app(directory, port=8765, token=None, connector=None, start_worker=Tr
     token = token or secrets.token_urlsafe(32)
     origin = f"http://127.0.0.1:{port}"
     failed_unlocks = []
+    update_cache = {}
+    update_lock = threading.Lock()
+
+    def check_update():
+        if not update_lock.acquire(blocking=False):raise VaultError('UPDATE_CHECK_RUNNING')
+        try:
+            if update_cache and time.monotonic()-update_cache['at']<60:return update_cache['result']
+            try:result=updater.check()
+            except updater.UpdateError as exc:raise VaultError(str(exc)) from None
+            result['update_command']=shlex.join(['uv','run','--locked','sub2easy-update','--apply','--yes',
+                '--data-dir',str(Path(directory).absolute()),'--expected-commit',result['commit']])
+            update_cache.update(at=time.monotonic(),result=result)
+            return result
+        finally:update_lock.release()
 
     @asynccontextmanager
     async def lifespan(app):
@@ -517,7 +533,12 @@ def create_app(directory, port=8765, token=None, connector=None, start_worker=Tr
     @app.get("/api/status")
     async def status():
         return {"initialized": vault.initialized, "unlocked": vault.key is not None, "version": __version__,
-                "features": ["server_deploy", "checkpoint_recovery", "probe_401_retry", "sub2_json_import", "account_usage", "job_cancellation", "inline_import_deploy", "parallel_tasks", "team_lost_retirement"]}
+                "features": ["server_deploy", "checkpoint_recovery", "probe_401_retry", "sub2_json_import", "account_usage", "job_cancellation", "inline_import_deploy", "parallel_tasks", "team_lost_retirement", "update_check"]}
+
+    @app.post('/api/updates/check')
+    async def updates_check():
+        # Read-only public GitHub metadata; no installation, vault material or NVT requests.
+        return await asyncio.to_thread(check_update)
 
     @app.post("/api/unlock")
     async def unlock(request: Request):

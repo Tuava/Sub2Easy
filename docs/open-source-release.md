@@ -19,18 +19,18 @@ npm run test:ui
 npm audit --audit-level=high
 uv run python scripts/release_check.py
 uv build
-uv run python scripts/release_check.py --archive dist/sub2easy-0.6.0-py3-none-any.whl --archive dist/sub2easy-0.6.0.tar.gz
+uv run python scripts/release_check.py --archive dist/sub2easy-0.7.0-py3-none-any.whl --archive dist/sub2easy-0.7.0.tar.gz
 uv run python scripts/export_source.py
 ```
 
-`export_source.py` 生成 `dist/sub2easy-0.6.0-github-source.zip` 及 SHA256 校验文件。仅包括源码、虚构示例、测试、文档、CI 和许可；不复制 data、数据库、Cookie、运行环境、缓存或旧构建包。同名产物已存在时会拒绝覆盖，请指定新的 `--output`。
+`export_source.py` 生成 `dist/sub2easy-0.7.0-github-source.zip` 及 SHA256 校验文件。仅包括源码、虚构示例、测试、文档、CI 和许可；不复制 data、数据库、Cookie、运行环境、缓存或旧构建包。同名产物已存在时会拒绝覆盖，请指定新的 `--output`。
 
 ## 3. 在干净目录发布
 
 解压源码 ZIP 到新目录，不在正在运营的源码目录里 `git add .`。
 
 ```bash
-cd Sub2Easy-0.6.0
+cd Sub2Easy-0.7.0
 git init -b main
 git add README.md LICENSE SECURITY.md CONTRIBUTING.md CHANGELOG.md THIRD_PARTY_NOTICES.md
 git add .gitignore .gitattributes .github pyproject.toml uv.lock package.json package-lock.json start.command

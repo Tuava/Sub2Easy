@@ -4,7 +4,7 @@
 
 Python + FastAPI + 原生 HTML/JS；没有前端构建步骤、云端数据库直写或外部 CDN。本项目为独立工具，不隶属于 sub2api、OpenAI 或授权服务提供商。
 
-> **当前版本：0.6.0，开源候选版。** 支持 macOS / Linux、Python 3.11+。Windows 原生尚不支持（使用 POSIX 文件锁），请勿把它标成跨平台桌面 App。它是本机浏览器 GUI，不是 Electron 应用。
+> **当前版本：0.7.0，开源候选版。** 支持 macOS / Linux、Python 3.11+。Windows 原生尚不支持（使用 POSIX 文件锁），请勿把它标成跨平台桌面 App。它是本机浏览器 GUI，不是 Electron 应用。
 
 ## 能做什么
 
@@ -16,6 +16,24 @@ Python + FastAPI + 原生 HTML/JS；没有前端构建步骤、云端数据库�
 - **可选 401 恢复**：先等 sub2api 原生刷新，持续 401 才重授权；测试通过后按设置恢复调度。人工停用、未知写入不自动强行恢复。
 - **用量在列表里**：已保存的 5h/7d 窗口与本站今日统计；缺失显示未知，不发请求伪造“只读”余额。
 - **可选终止修复清理**：仅对同用户个人免费 workspace 回退错误，停调度后移入明确选择的测试组，不用个人凭据覆盖团队账号。**默认关闭。**
+
+## 交给 AI 部署
+
+把仓库链接交给部署 AI，并要求它先阅读根目录 **[AGENTS.md](AGENTS.md)** 和 **[AI 部署手册](docs/ai-deployment.md)**。
+
+**需要 NVT 重授权/自动401修复时，一定要配置 NV站的 CK：`scm_session` Cookie。** 部署AI必须主动提醒你在本地“连接与模板 → NVT Cookie”填写，不要把CK发到聊天、Issue或Git。只有sub2api管理员Key不够完成重授权。界面也会持续提示缺少CK/连接器暂停；已保存不代表会话仍有效。
+
+## 版本更新
+
+“连接与模板 → 版本与更新”可检查 GitHub main 的新版本/提交。不会静默安装，不发送账号信息。Git安装在暂停任务、停服务后运行：
+
+```bash
+uv run --locked sub2easy-update
+uv run --locked sub2easy-update --apply --yes --data-dir ./data
+uv run --locked sub2easy --data-dir ./data --reuse-session
+```
+
+自动备份SQLite、只快进官方main、同步锁定依赖；拒绝脏工作区/分叉，依赖失败尝试回滚。ZIP/wheel升级与旧v0.6首次升级见 [更新文档](docs/updates.md)。更新后还要核对 NV站CK 的配置状态。
 
 ## 快速开始
 
@@ -37,7 +55,7 @@ macOS 也可双击 `start.command`（如无执行权限，先 `chmod +x start.co
 ```bash
 uv build
 python3 -m venv .venv-app
-.venv-app/bin/pip install dist/sub2easy-0.6.0-py3-none-any.whl
+.venv-app/bin/pip install dist/sub2easy-0.7.0-py3-none-any.whl
 .venv-app/bin/sub2easy
 ```
 
@@ -86,7 +104,7 @@ npm ci --ignore-scripts
 npm run test:ui
 uv run --locked python scripts/release_check.py
 uv build
-uv run python scripts/release_check.py --archive dist/sub2easy-0.6.0-py3-none-any.whl --archive dist/sub2easy-0.6.0.tar.gz
+uv run python scripts/release_check.py --archive dist/sub2easy-0.7.0-py3-none-any.whl --archive dist/sub2easy-0.7.0.tar.gz
 uv run python scripts/export_source.py
 ```
 
