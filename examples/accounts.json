@@ -1,0 +1,31 @@
+[
+  {
+    "id": 101, "platform": "openai", "group_ids": [1, 2],
+    "status": "active", "schedulable": true,
+    "expires_at": null, "auto_pause_on_expired": true,
+    "rate_limit_reset_at": null, "overload_until": null,
+    "temp_unschedulable_until": null
+  },
+  {
+    "id": 102, "platform": "openai", "group_ids": [1],
+    "status": "active", "schedulable": true,
+    "expires_at": null, "auto_pause_on_expired": true,
+    "rate_limit_reset_at": "2099-01-01T00:00:00Z", "overload_until": null,
+    "temp_unschedulable_until": null
+  },
+  {
+    "id": 103, "platform": "anthropic", "group_ids": [3],
+    "status": "error", "schedulable": false,
+    "expires_at": null, "auto_pause_on_expired": true,
+    "rate_limit_reset_at": null, "overload_until": null,
+    "temp_unschedulable_until": null
+  },
+  {
+    "id": 104, "platform": "anthropic", "group_ids": [3],
+    "status": "inactive", "schedulable": false,
+    "expires_at": null, "auto_pause_on_expired": true,
+    "rate_limit_reset_at": null, "overload_until": null,
+    "temp_unschedulable_until": null
+  },
+  {"id": 105, "platform": "gemini", "group_ids": [4], "status": "active"}
+]

@@ -1,0 +1,21 @@
+{
+  "type": "sub2api-data",
+  "version": 1,
+  "proxies": [],
+  "accounts": [
+    {
+      "name": "Synthetic JSON account",
+      "platform": "openai",
+      "type": "oauth",
+      "credentials": {
+        "email": "json-demo@example.invalid",
+        "chatgpt_account_id": "synthetic-workspace",
+        "chatgpt_user_id": "synthetic-user",
+        "client_id": "synthetic-client",
+        "access_token": "SYNTHETIC_ACCESS_NOT_USABLE",
+        "refresh_token": "SYNTHETIC_REFRESH_NOT_USABLE",
+        "expires_at": "2099-01-01T00:00:00Z"
+      }
+    }
+  ]
+}

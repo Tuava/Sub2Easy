@@ -1,0 +1,42 @@
+[project]
+name = "sub2easy"
+version = "0.6.0"
+description = "Local account-pool operations console for sub2api"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Sub2Easy contributors"}]
+requires-python = ">=3.11"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Web Environment",
+  "Operating System :: MacOS :: MacOS X",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: System :: Systems Administration",
+]
+dependencies = [
+  "cryptography>=45,<51",
+  "fastapi>=0.115,<1",
+  "httpx>=0.28,<1",
+  "uvicorn>=0.34,<1",
+]
+
+[project.scripts]
+sub2easy = "sub2easy.gui:main"
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sub2easy"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/sub2easy", "/tests", "/examples", "/docs", "/scripts", "/.github",
+  "/README.md", "/LICENSE", "/SECURITY.md", "/CONTRIBUTING.md", "/CHANGELOG.md",
+  "/THIRD_PARTY_NOTICES.md", "/pyproject.toml", "/uv.lock",
+  "/package.json", "/package-lock.json", "/start.command", "/.gitignore", "/.gitattributes",
+]

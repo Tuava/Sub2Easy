@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sub2Easy · 本地号池工作台</title><link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="Sub2Easy 首页"><span class="brand-mark">s₂</span><span>Sub2Easy<small>ACCOUNT OPERATIONS</small></span></a>
+    <div class="workspace"><span class="status-dot"></span>本地工作空间<span class="mono">01</span></div>
+    <p class="nav-label">工作台</p>
+    <nav aria-label="工作区">
+      <button class="nav active" data-page="pool" aria-label="号池总览" title="号池总览"><span aria-hidden="true">▦</span>号池总览<span id="nav-count" class="nav-count">0</span></button>
+      <button class="nav" data-page="cloud" aria-label="全站账号" title="全站账号"><span aria-hidden="true">☁</span>全站账号</button>
+      <button class="nav" data-page="bindings" aria-label="绑定处理中心" title="绑定处理中心"><span aria-hidden="true">⇄</span>绑定处理中心</button>
+      <button class="nav" data-page="import" aria-label="批量导入" title="批量导入"><span aria-hidden="true">↳</span>批量导入</button>
+      <button class="nav" data-page="jobs" aria-label="任务中心" title="任务中心"><span aria-hidden="true">≋</span>任务中心<span id="job-count" class="nav-count">0</span></button>
+      <button class="nav" data-page="monitor" aria-label="账号监控" title="账号监控"><span aria-hidden="true">◉</span>账号监控</button>
+      <button class="nav" data-page="settings" aria-label="连接与模板" title="连接与模板"><span aria-hidden="true">⚙</span>连接与模板</button>
+    </nav>
+    <div class="sidebar-bottom"><div class="local-badge">● LOCAL FIRST</div><p>凭据留在本机加密库<br>操作由你发起，进度可追溯。</p><button id="lock-btn" class="sidebar-lock">锁定凭据库 ↗</button><small id="runtime-version">服务版本待确认</small></div>
+  </aside>
+  <div class="content">
+    <header class="topbar"><div><span class="breadcrumb">工作空间</span><span class="slash">/</span><span id="breadcrumb-current">号池总览</span></div><div class="topbar-right"><span class="connection-pill" id="connection-pill">尚未连接云端</span><button id="compact-lock" class="compact-lock" aria-label="锁定凭据库">锁定</button><span class="avatar">S</span></div></header>
+    <main>
+      <section id="page-pool" class="page">
+        <div class="page-heading"><div><p class="eyebrow">YOUR POOL, UNDER CONTROL</p><h1>号池总览<span class="heading-dot">.</span></h1><p class="subtitle">管理本地身份，查看云端绑定与每账号用量。</p></div><div class="heading-actions"><button id="sync-btn" class="button secondary">↻ 同步云端快照</button><button class="button secondary" data-go="import">＋ 添加到本地</button></div></div>
+        <div class="notice pool-notice"><span class="notice-symbol" aria-hidden="true">↔</span><div><strong>本地入库 ≠ 服务器上线。</strong><span id="pool-mode-description">监控尚未开启，手动授权不会自动写入云端。</span></div><span id="pool-mode-tag" class="mode-tag">MANUAL</span></div>
+        <ol id="pool-workflow" class="workflow-steps" aria-label="从本地到上线，三步操作">
+          <li><span class="step-number" aria-hidden="true">1</span><div><button type="button" class="step-link" data-go="import">保存到本地</button><p>填写材料，在同页导入服务器</p></div></li>
+          <li><span class="step-number" aria-hidden="true">2</span><div><strong>导入服务器并上线</strong><p>勾选账号，确认模板与验号模型</p></div></li>
+          <li><span class="step-number" aria-hidden="true">3</span><div><button type="button" class="step-link" data-go="jobs">在任务中心核对结果</button><p>以验号通过和最终云端读回为准</p></div></li>
+        </ol>
+        <div class="stats">
+          <article class="stat"><div>本地账号 <span>↗</span></div><strong id="stat-total">0</strong><small>已导入的独立登录身份</small></article>
+          <article class="stat"><div>授权就绪 <span class="green-dot">●</span></div><strong id="stat-ready">0</strong><small>已通过结构与身份字段校验</small></article>
+          <article class="stat"><div>需要处理 <span class="amber-dot">●</span></div><strong id="stat-attention">0</strong><small>失败、未知结果或格式待核对</small></article>
+          <article class="stat"><div>云端候选 <span>☁</span></div><strong id="stat-cloud">—</strong><small id="cloud-time">尚未采集，不等于不可用</small></article>
+        </div>
+        <div class="panel pool-panel">
+          <div class="panel-heading"><div><h2 id="local-list-title">本地账号 <span id="pool-count" class="count-pill">0</span></h2><p>默认按导入时间固定排序，监控更新不挪行。完整邮箱可搜索；本批导入结果在导入页保留。</p></div><div class="table-controls"><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" aria-label="搜索账号" placeholder="搜索名称、ID、邮箱"></label><select id="status-filter" aria-label="账号状态筛选"><option value="">全部状态</option><option value="local">本地待授权</option><option value="authorized">授权就绪</option><option value="failed">授权失败</option><option value="review">格式待核对</option><option value="cloud_paused">已写入·待验号</option><option value="active">自动恢复成功</option><option value="retired">已移测试组</option></select></div></div>
+          <div class="filter-bar local-filters">
+<label>绑定<select id="local-binding"><option value="">全部绑定状态</option><option value="unbound">未绑定</option><option value="bound">当前站点已绑定</option><option value="other">其他站点</option></select></label>
+<label>监控<select id="local-monitor"><option value="">全部监控状态</option><option value="enabled">已开启托管</option><option value="disabled">未开启托管</option><option value="attention">需要处理</option></select></label>
+<label>云端分组<select id="local-group"><option value="">全部分组</option></select></label>
+<label>云端代理<select id="local-proxy"><option value="">全部代理</option></select></label>
+<label>模板<select id="local-profile"><option value="">全部模板</option></select></label>
+<label>排序<select id="local-sort"><option value="import_desc">最近导入（固定）</option><option value="name">邮箱 A–Z</option><option value="updated_desc">最近更新（动态）</option></select></label>
+<button id="local-unbound" class="button small secondary" type="button">只看未上传账号</button><button id="local-last-import" class="button small secondary" type="button">查看导入批次</button><button id="local-reset" class="button small secondary" type="button">重置筛选</button></div>
+<div class="bulkbar local-toolbar" role="group" aria-label="本地账号操作">
+  <label><input id="select-all" type="checkbox"> 全选本页</label>
+  <span id="selected-count" role="status" aria-live="polite">已选 0 个</span>
+  <button id="deploy-selected" type="button" class="button small primary" aria-describedby="pool-workflow" disabled>导入服务器并上线</button>
+  <button id="refresh-usage" type="button" class="button small secondary" aria-controls="account-rows" title="刷新账号用量，不发起授权或上线">↻ 刷新用量</button>
+  <details id="local-bulk-more" class="bulk-more">
+    <summary>更多批量操作</summary>
+    <div class="bulk-more-actions" role="group" aria-label="次级批量操作">
+      <button id="batch-bind-selected" type="button" class="button small secondary" disabled>批量自动绑定</button>
+      <button id="monitor-selected" type="button" class="button small secondary" disabled>开启所选监控</button>
+      <button id="authorize-selected" type="button" class="button small secondary" title="仅获取授权，不会自动写入服务器或上线" disabled>仅授权所选账号</button>
+    </div>
+  </details>
+</div>
+          <div class="table-scroll account-table-scroll" role="region" tabindex="0" aria-label="本地账号列表，可横向滚动"><table class="account-table local-account-table" aria-labelledby="local-list-title"><thead><tr><th scope="col" class="check-cell"><span class="sr-only">选择</span></th><th scope="col">账号 / 本地身份</th><th scope="col">状态</th><th scope="col">云端绑定</th><th scope="col" class="usage-heading">用量 / 重置</th><th scope="col">导入模板</th><th scope="col">操作</th></tr></thead><tbody id="account-rows"></tbody></table></div>
+          <div id="empty-pool" class="empty-state"><div class="empty-art" aria-hidden="true"><span>＋</span><i></i><i></i></div><h3>从第一批账号开始</h3><p>支持三段登录材料或 sub2api JSON。<br>在导入页一次提交到服务器；只存本地也有本批列表和上传入口。</p><button class="button secondary" data-go="import">添加第一批本地账号 ↗</button><small>本地入库不会自动调用授权接口或修改云端</small></div>
+          <div id="no-matches" class="no-matches" hidden>没有符合条件的账号。</div>
+          <div class="pager"><span id="local-page-info"></span><button id="local-prev" class="button small secondary">上一页</button><button id="local-next" class="button small secondary">下一页</button></div><div class="panel-footer"><span><span class="green-dot">●</span> 密码、TOTP 和 Cookie 不返回页面</span><span id="refresh-time">本地数据</span></div>
+        </div>
+        <details class="pool-notes"><summary>身份与配置说明</summary><div class="bottom-grid"><article class="info-card"><span class="card-number">01 / IDENTITY</span><h3>一个身份，一条授权链。</h3><p>首次导入和后续重授权共用登录材料。任务记录到账号，不靠文件顺序配对。</p></article><article class="info-card"><span class="card-number">02 / RECONCILIATION</span><h3>发现差异，不盲目覆盖。</h3><p>云端快照仅用于观察。重新授权不修改分组、代理、指纹模式或倍率。</p></article></div></details>
+      </section>
+
+
+<section id="page-bindings" class="page" hidden>
+<div class="page-heading"><div><p class="eyebrow">MATCH & RESOLVE</p><h1>绑定处理中心<span class="heading-dot">.</span></h1><p class="subtitle">自动匹配唯一身份，把歧义和错误留给你集中处理。</p></div><div class="heading-actions"><button id="bind-all" class="button primary">匹配全部未绑定账号</button><button id="bind-retry" class="button secondary">重试待处理项</button></div></div>
+<div class="notice"><span class="notice-symbol">⇄</span><div><strong>身份决定能否绑定，名称与时间辅助排序。</strong><span>唯一邮箱/平台身份匹配可自动绑定；多个同名号、workspace 歧义或缺少身份字段时，先查看详情再选择。不修改云端账号、不自动开启监控。</span></div></div>
+<div class="panel"><div class="panel-heading"><div><h2>本次及历史待处理项</h2><p id="binding-report-summary">从号池选择账号，或点击“匹配全部未绑定账号”。</p></div><select id="binding-result-filter" aria-label="绑定结果筛选"><option value="pending">仅待处理</option><option value="all">全部结果</option><option value="ambiguous">多个候选</option><option value="not_found">没有匹配</option><option value="conflict">身份/占用冲突</option><option value="failed">请求失败</option><option value="bound">绑定成功</option></select></div><div class="table-scroll"><table><thead><tr><th>本地账号 / 时间参考</th><th>匹配结果</th><th>候选数量</th><th>说明</th><th>处理</th></tr></thead><tbody id="binding-report-rows"></tbody></table></div><div id="binding-empty" class="simple-empty">没有待处理的绑定问题。</div></div>
+</section>
+<section id="page-cloud" class="page" hidden>
+<div class="page-heading"><div><p class="eyebrow">SITE ACCOUNT DIRECTORY</p><h1 id="cloud-list-title">全站账号<span class="heading-dot">.</span></h1><p class="subtitle">当前站点账号快照，包含未导入本地的账号；用量随账号列示。</p></div><div class="heading-actions cloud-toolbar" role="group" aria-label="全站账号操作"><button id="cloud-reload" type="button" class="button secondary">↻ 刷新全站账号</button><button id="cloud-refresh-usage" type="button" class="button secondary" aria-controls="cloud-list-rows" title="刷新账号用量，不修改云端账号">↻ 刷新用量</button></div></div>
+<div class="panel"><div class="filter-bar cloud-filters">
+<label class="filter-search">名称 / 邮箱 / ID<input id="cloud-query" placeholder="搜索名称、邮箱、workspace 或账号 ID"></label>
+<label>平台<select id="cloud-platform"><option value="">全部平台</option></select></label>
+<label>状态<select id="cloud-status"><option value="">全部状态</option><option value="active">active</option><option value="inactive">inactive</option><option value="error">error</option><option value="401">账号 401</option><option value="paused">停止调度</option></select></label>
+<label>分组<select id="cloud-group"><option value="">全部分组</option></select></label>
+<label>代理<select id="cloud-proxy"><option value="">全部代理</option></select></label>
+<label>绑定<select id="cloud-binding"><option value="">全部账号</option><option value="bound">本地已绑定</option><option value="unbound">未绑定本地</option><option value="monitored">已开启监控</option></select></label>
+<label>创建自<input id="cloud-since" type="date"></label><label>创建至<input id="cloud-until" type="date"></label>
+<label>排序<select id="cloud-sort"><option value="created_desc">创建时间倒序</option><option value="created_asc">创建时间正序</option><option value="name">名称</option><option value="id">ID</option></select></label>
+<button id="cloud-apply" class="button small secondary">应用筛选</button><button id="cloud-reset" class="button small secondary">重置</button></div>
+<div class="panel-heading"><p id="cloud-list-status" role="status">点击刷新获取当前站点完整列表。</p></div><div class="table-scroll account-table-scroll" role="region" tabindex="0" aria-label="全站账号列表，可横向滚动"><table class="account-table cloud-account-table" aria-labelledby="cloud-list-title"><thead><tr><th scope="col">ID / 名称</th><th scope="col">邮箱 / workspace</th><th scope="col">平台 / 状态</th><th scope="col">分组 / 代理</th><th scope="col" class="usage-heading">用量 / 重置</th><th scope="col">创建 / 最近使用</th><th scope="col">本地绑定</th></tr></thead><tbody id="cloud-list-rows"></tbody></table></div><div id="cloud-empty" class="simple-empty" hidden>没有符合条件的账号。</div><div class="pager"><span id="cloud-page-info"></span><button id="cloud-prev" class="button small secondary">上一页</button><button id="cloud-next" class="button small secondary">下一页</button></div></div>
+</section>
+
+<section id="page-import" class="page" hidden>
+        <div class="page-heading"><div><p class="eyebrow">BATCH INTAKE</p><h1>批量导入<span class="heading-dot">.</span></h1><p class="subtitle">导入、上线、进度在同一页完成；仅存本地也可从下方批次继续上传。</p></div><button id="sample-btn" class="button secondary">填入虚构示例</button></div>
+        <div class="import-grid"><div class="panel form-panel"><div class="section-number">01 <span>账号材料</span></div><label for="import-format">导入格式</label><select id="import-format"><option value="login">账号----密码----2FA种子（TXT）</option><option value="sub2">sub2api JSON（Token 账号）</option></select><p id="import-format-help" class="field-help">三段材料可用于后续 NVT 自动重新授权。</p><label for="materials" id="materials-label">账号----密码----2FA种子</label><textarea id="materials" spellcheck="false" autocomplete="off" placeholder="account@example.com----password----BASE32_TOTP_SECRET"></textarea><div class="inline-help"><span id="material-help">第三段为种子，不是六位动态验证码。密码保持原样。</span><label class="file-button"><span id="material-file-label">导入 TXT</span><input type="file" id="material-file" accept=".txt,text/plain" multiple hidden></label></div><label id="sub2-update-wrap" class="checkbox-label" hidden><input id="sub2-update" type="checkbox">允许更新同身份的已有本地凭据（是否写云端由提交按钮决定）</label><div class="form-actions"><button id="preview-btn" class="button secondary">校验并预览</button><button id="import-btn" class="button secondary">仅保存到本地</button><button id="import-deploy-btn" type="button" class="button primary">导入到服务器并上线</button></div><div id="import-result" class="result-box" role="status" hidden></div></div>
+        <div class="panel form-panel"><div class="section-number">02 <span>目标分组与上线确认</span></div><p id="import-destination" class="field-help"></p><div id="import-profile-summary" class="profile-summary"></div><details class="import-template-editor"><summary>修改本次模板配置</summary><div id="import-template-slot"></div></details><label for="import-deploy-model">验号模型 ID</label><input id="import-deploy-model" maxlength="160" placeholder="填写本批账号可用的文本模型 ID"><p class="field-help">有效Token直接复用；没有有效授权才登录。新号用上面的生产组，已绑定旧号保留原分组。</p><label class="checkbox-label"><input id="import-auto-monitor" type="checkbox" checked>上线成功后自动加入 401 监控并启动后台监听（需要完整重授权时使用已保存的密码/2FA；可取消）</label><p id="import-monitor-help" class="field-help"></p><label class="checkbox-label"><input id="import-deploy-confirm" type="checkbox">确认将本批账号写入已配置站点，验号通过后启用；需要授权时允许发送本批登录材料到NVT。</label><label class="checkbox-label"><input id="import-deploy-isolation" type="checkbox">如有新号：确认隔离组不接业务流量，不被默认路由或fallback使用。</label><p class="field-help">点左侧“导入到服务器并上线”即可开始，不用切页重新选择账号。“仅保存到本地”不发起服务器任务。</p></div></div>
+        <div class="import-history-bar"><label for="import-history">导入记录（刷新后仍保留）</label><select id="import-history"><option value="">暂无导入记录</option></select></div>
+        <section id="import-batch-panel" class="panel import-batch-panel" hidden><div class="panel-heading"><div><h2>本批账号与导入结果</h2><p id="import-batch-summary" role="status"></p></div><div class="form-actions"><button id="import-batch-deploy" class="button primary" type="button" hidden>将本批本地账号导入服务器</button><button id="import-batch-refresh" class="button secondary small" type="button">刷新本批进度</button></div></div><div class="table-scroll"><table><thead><tr><th>序号 / 完整邮箱</th><th>服务器ID</th><th>当前阶段</th><th>结果 / 监控</th><th>操作</th></tr></thead><tbody id="import-batch-rows"></tbody></table></div></section>
+      </section>
+
+      <section id="page-jobs" class="page" hidden>
+        <div class="page-heading"><div><p class="eyebrow">AUTHORIZATION QUEUE</p><h1>任务中心<span class="heading-dot">.</span></h1><p class="subtitle">不同账号并行执行；同一账号仍串行，避免重复授权和覆盖。</p></div><button id="cancel-queued" class="button secondary">取消排队中的任务</button></div>
+        <div class="notice"><span class="notice-symbol">i</span><div><strong>INCORRECT_CODE → 检查材料后手动重试。</strong><span>连接超时标记“结果未知”；格式未识别标记“待核对”。两种情况都不会自动再次登录。</span></div></div>
+        <div id="deploy-report" class="result-box" role="status" hidden></div><div class="panel task-pool-panel"><div class="panel-heading"><div><h2>并行任务池</h2><p id="task-pool-runtime">不同账号可同时处理；同一账号、同一登录身份不会并发。</p></div><span id="task-pool-tag" class="mode-tag">并行 × 3</span></div><div class="task-pool-controls"><label>同时处理账号<select id="task-max-workers"><option value="1">1 个</option><option value="2">2 个</option><option value="3" selected>3 个</option><option value="4">4 个</option><option value="5">5 个</option><option value="6">6 个</option><option value="7">7 个</option><option value="8">8 个</option></select></label><label>同时授权上限<select id="task-max-auth"><option value="1">1 个</option><option value="2" selected>2 个</option><option value="3">3 个</option><option value="4">4 个</option><option value="5">5 个</option><option value="6">6 个</option><option value="7">7 个</option><option value="8">8 个</option></select></label><label class="checkbox-label"><input id="task-pool-paused" type="checkbox">暂停新任务</label><button id="task-pool-save" class="button secondary small" type="button">保存并应用</button></div></div><div class="panel"><div class="panel-heading"><div><h2>最近任务</h2><p>区分授权、导入上线、自动恢复；成功以验号和最终云端读回为准。</p></div><span class="mode-tag">并行执行</span></div><div class="table-scroll"><table><thead><tr><th>任务 / 账号</th><th>状态</th><th>阶段</th><th>结果</th><th>创建时间</th></tr></thead><tbody id="job-rows"></tbody></table></div><div id="empty-jobs" class="simple-empty">暂无任务。在号池勾选账号，点击“导入服务器并上线”。</div></div>
+      </section>
+
+
+      <section id="page-monitor" class="page" hidden>
+        <div class="page-heading"><div><p class="eyebrow">ACCOUNT HEALTH & RECOVERY</p><h1>账号监控<span class="heading-dot">.</span></h1><p class="subtitle">持续发现 401，用已保存的登录材料修复原账号。</p></div><div class="heading-actions"><button id="monitor-check" class="button secondary">立即检查</button><button id="monitor-stop" class="button secondary">停止自动监控</button></div></div>
+        <div class="notice"><span class="notice-symbol">◉</span><div><strong id="monitor-state">未开启</strong><span id="monitor-runtime">开启后只处理已绑定且单独启用监控的账号。</span></div><span id="monitor-scope-count" class="mode-tag">0 ACCOUNTS</span></div>
+        <div class="settings-grid">
+          <form id="monitor-form" class="panel form-panel">
+            <div class="section-number">01 <span>自动修复策略</span></div>
+            <label for="monitor-interval">检查间隔</label><select id="monitor-interval"><option value="30">每 30 秒</option><option value="60" selected>每 60 秒</option><option value="120">每 2 分钟</option><option value="300">每 5 分钟</option></select>
+            <label for="monitor-grace">持续 401 等待窗口</label><select id="monitor-grace"><option value="60">1 分钟</option><option value="120" selected>2 分钟（建议）</option><option value="300">5 分钟</option><option value="600">10 分钟</option></select>
+            <p class="field-help">先等待 sub2api 自身刷新恢复；窗口内 401 消失则不重登。已托管的停止调度账号出现明确 401 也会修复。</p>
+            <label for="monitor-model">恢复验证模型</label><input id="monitor-model" required maxlength="160" placeholder="填写托管账号可用的文本模型 ID">
+            <p class="field-help">重授权后发一次小请求验证，可能产生模型用量；并非每次轮询都调用模型。</p>
+            <label for="monitor-budget">全局每小时最多自动修复任务</label><input id="monitor-budget" type="number" min="1" max="60" value="6" required>
+            <label class="checkbox-label"><input id="monitor-resume" type="checkbox" checked>验证成功后自动恢复调度</label>
+            <label class="checkbox-label"><input id="monitor-resume-paused" type="checkbox">对已托管的 401 暂停账号：修复并验号通过后也自动启用</label>
+            <p class="field-help">不会启用 inactive 账号、没有明确 401 的普通暂停账号，或验号失败/写入结果未知的账号。</p>
+            <button id="monitor-save" type="submit" class="button primary full-width">保存并开启自动监控</button>
+          </form>
+          <div class="panel form-panel"><div class="section-number">02 <span>监控范围与运行条件</span></div><p class="field-help">先在号池中绑定原 sub2api ID，再对账号点击“监控”。仅有云端账号、没有本地密码和 2FA 种子，无法自动重授权。</p>
+            <div class="profile-summary"><div class="profile-line"><span>发现异常</span><span>读取账号 401 错误状态</span></div><div class="profile-line"><span>自动处理</span><span>停调度 → NVT 重授权 → 原 ID 更新</span></div><div class="profile-line"><span>恢复条件</span><span>SSE 测试成功 + 状态读回</span></div><div class="profile-line"><span>不做什么</span><span>不重建账号、不改指纹/分组</span></div></div>
+            <div class="quiet-note">程序运行且凭据库解锁时才监控。关闭网页不影响后台；锁定凭据库、退出程序或电脑休眠会暂停工作。启动开关不会自动接管所有账号。</div>
+            <div class="quiet-note">验证码错误、Cookie 失效、网络结果未知、配置被人工修改时停止该次修复并保留待办。不会无限重试，也不会把管理员接口 401 当成整池掉授权。</div>
+            <button class="button secondary full-width" data-go="pool">去号池选择托管账号 →</button>
+          </div>
+        </div>
+        <div class="panel form-panel"><h2>团队授权丢失 → 测试组</h2><p class="field-help">仅处理 NVT 返回同用户个人免费 workspace 的错误。移出原生产组，保持停止调度，退出监控；不再重登、不写入个人凭据。只在移组读回确认成功后标记“已移测试组”。</p><label class="checkbox-label"><input id="retirement-enabled" type="checkbox">自动清理这类账号（默认关闭；包括已有失败记录）</label><label for="retirement-group">测试组</label><select id="retirement-group"><option value="">自动匹配唯一名称“测试组”</option></select><div class="form-actions"><button id="retirement-save" class="button secondary" type="button">保存清理规则</button><button id="retirement-check" class="button secondary" type="button">立即清理符合条件的账号</button></div><p id="retirement-runtime" class="field-help" role="status"></p></div>
+        <div class="panel monitor-table"><div class="panel-heading"><div><h2>托管账号状态</h2><p>查看最近检查、等待窗口与修复结果；详细操作阶段在授权任务中。</p></div></div><div class="table-scroll"><table><thead><tr><th>账号 / 云端 ID</th><th>监控状态</th><th>最近检查</th><th>最近结果</th></tr></thead><tbody id="monitor-rows"></tbody></table></div><div id="monitor-empty" class="simple-empty">还没有托管账号，请先完成云端绑定并开启账号监控。</div></div>
+      </section>
+
+      <section id="page-settings" class="page" hidden>
+        <div class="page-heading"><div><p class="eyebrow">CONNECTIONS & PROFILES</p><h1>连接与模板<span class="heading-dot">.</span></h1><p class="subtitle">连接密钥加密保存，界面只显示是否已配置。</p></div></div>
+        <div class="settings-grid"><form id="connection-form" class="panel form-panel"><div class="section-number">01 <span>连接设置</span></div><div class="endpoint-label">NVTOKENS · 重授权连接器</div><div class="endpoint mono">nvtokens.com/api/workspace/tools/<br>account-reauthorize</div><label for="nvt-cookie">scm_session Cookie <span id="cookie-indicator" class="field-indicator">未配置</span></label><input id="nvt-cookie" type="password" autocomplete="new-password" placeholder="仅 Cookie 值，或 scm_session=…"><p class="field-help">留空保持已保存值。过期后粘贴新值保存，将恢复队列。</p><label for="oauth-client-id">OAuth client_id <span class="optional">可选</span></label><input id="oauth-client-id" placeholder="仅在导出结果缺少此字段时使用已知值"><p class="field-help">不是 sub2api API Key。不确定时留空，结果将保留待核对。</p><div class="form-divider"></div><div class="endpoint-label">SUB2API · 管理连接</div><label for="sub2-url">站点地址</label><input id="sub2-url" type="url" placeholder="https://your-sub2api.example"><label for="admin-key">管理员 API Key <span id="admin-indicator" class="field-indicator">未配置</span></label><input id="admin-key" type="password" autocomplete="new-password" placeholder="留空保持已保存值"><div class="checkbox-row"><label><input id="clear-cookie" type="checkbox">清除已保存 Cookie</label><label><input id="clear-admin" type="checkbox">清除管理员 Key</label></div><button class="button primary full-width" type="submit">保存连接设置</button></form>
+        <div id="settings-template-slot"><form id="profile-form" class="panel form-panel"><div class="section-number">02 <span>新账号导入模板</span></div><div class="choices-toolbar"><p id="choices-status" class="field-help" role="status">先保存站点地址和管理员 Key，再加载可选分组与代理。</p><button id="reload-choices" type="button" class="button secondary small">↻ 刷新选项</button></div><label for="profile-name">模板名称</label><input id="profile-name" value="openai-default"><div class="form-row"><div><label for="staging-group">隔离分组</label><select id="staging-group" required disabled><option value="">请先配置站点</option></select></div><div><label id="target-groups-label">生产分组 · 可多选</label><details id="target-groups" class="multi-select"><summary id="target-groups-summary" aria-labelledby="target-groups-label target-groups-summary" aria-disabled="true">请先配置站点</summary><div id="target-group-options" class="multi-options"></div></details></div></div><div class="form-row"><div><label for="proxy-id">账号代理</label><select id="proxy-id" disabled><option value="">直连 · 不指定代理</option></select></div><div><label for="concurrency">并发数</label><input id="concurrency" type="number" min="1" required value="1"></div></div><div class="form-row"><div><label for="priority">优先级</label><input id="priority" type="number" min="0" required value="50"></div><div><label for="rate">计费倍率</label><input id="rate" type="number" min="0" step="0.01" required value="1"></div></div><label for="fingerprint">Codex 指纹收敛</label><select id="fingerprint"><option value="off">off · 关闭（默认）</option><option value="device">device · 仅设备</option><option value="session">session · 设备 + 会话</option><option value="full">full · 完全收敛</option></select><p class="field-help">按账号生成种子，不是全池共用一个指纹。重授权保留原配置。</p><label for="account-expiry">账号运营到期 <span class="optional">可选</span></label><input id="account-expiry" type="datetime-local"><label class="checkbox-label"><input id="auto-pause" type="checkbox" checked>账号到期自动暂停</label><div class="quiet-note">仅支持 OpenAI OAuth。生产组只记录为上线目标；使用“导入服务器并上线”可自动验号、移入生产组并启用；旧号不会修改分组。</div><p id="selection-warning" class="error-text" role="status"></p><button id="save-profile" class="button primary full-width" type="submit" disabled>保存模板新版本</button></form></div></div>
+      </section>
+      <footer class="main-footer"><span>Sub2Easy / 本地号池工作台</span><span id="monitor-footer">只监听 127.0.0.1 · 监控未开启</span></footer>
+    </main>
+  </div>
+</div>
+<div id="lock-screen" class="lock-screen">
+  <form id="unlock-form" class="unlock-card"><div class="unlock-logo">s₂</div><p class="eyebrow">LOCAL VAULT</p><h2 id="unlock-title">解锁工作空间</h2><p id="unlock-description">输入主密码，解锁本机加密凭据库。</p><label for="master-password">主密码</label><input id="master-password" type="password" minlength="10" required autocomplete="current-password" placeholder="至少 10 个字符"><label id="confirm-label" for="confirm-password" hidden>再次输入主密码</label><input id="confirm-password" type="password" autocomplete="new-password" hidden><button class="button primary full-width" id="unlock-submit" type="submit">解锁 →</button><p class="unlock-footnote">主密码不会保存。忘记密码将无法解密已有材料。<br>本机数据库与主密码请分开备份。</p><div id="unlock-error" class="error-text" role="alert"></div></form>
+</div>
+<dialog id="action-dialog"><form method="dialog"><div class="dialog-head"><h2 id="dialog-title">确认操作</h2><button class="icon-button" value="cancel" aria-label="关闭">×</button></div><p id="dialog-message"></p><div id="dialog-input-wrap" hidden><label for="dialog-input" id="dialog-input-label">云端账号 ID</label><input id="dialog-input" type="number" min="1"></div><label id="dialog-check-wrap" class="checkbox-label" hidden><input id="dialog-check" type="checkbox"><span id="dialog-check-label"></span></label><div class="dialog-actions"><button class="button secondary" value="cancel">取消</button><button id="dialog-confirm" class="button primary" value="confirm">确认</button></div></form></dialog>
+<dialog id="binding-dialog"><div class="dialog-head"><h2 id="binding-dialog-title">选择云端候选</h2><button id="binding-close" class="icon-button" aria-label="关闭候选列表">×</button></div><p id="binding-dialog-description" class="field-help"></p><div class="candidate-controls"><input id="candidate-query" aria-label="搜索候选账号" placeholder="筛选候选名称、邮箱、ID 或 workspace"><label><input type="checkbox" id="candidate-eligible">仅可绑定候选</label><select id="candidate-sort" aria-label="候选排序"><option value="match">匹配程度</option><option value="time">时间接近</option><option value="newest">创建时间倒序</option></select></div><div id="candidate-list"></div><p class="field-help">时间参考不是身份凭证。按钮禁用的候选需先补齐身份或解决冲突，不能通过手动选择绕过身份校验。</p></dialog>
+<dialog id="deployment-dialog"><form id="deployment-form"><div class="dialog-head"><h2>导入服务器并上线</h2><button id="deployment-close" type="button" class="icon-button" aria-label="关闭导入服务器窗口">×</button></div><p id="deployment-summary" class="field-help"></p><label for="deployment-model">验号模型 ID</label><input id="deployment-model" required maxlength="160" placeholder="这些账号确实可用的文本模型 ID"><p class="field-help">已有有效凭据直接复用；否则调用 NVT。旧号保留原分组、代理和指纹；新号使用当前模板。分组名称叫“隔离”并不能证明它不接生产流量。</p><label class="checkbox-label"><input id="deployment-auto-monitor" type="checkbox" checked>上线成功后加入 401 监控，并启动后台监听；完整重授权使用已保存的密码和2FA。</label><label class="checkbox-label"><input id="deployment-confirm" type="checkbox" required>确认写入当前站点、发起模型验号并在通过后上线；需要授权时允许发送所选材料至 NVT。</label><label id="deployment-isolation-wrap" class="checkbox-label"><input id="deployment-isolation" type="checkbox">新号的隔离组已经确认不被业务 Key、默认路由或 fallback 使用。</label><div class="dialog-actions"><button type="submit" id="deployment-submit" class="button primary">开始导入服务器</button></div><p id="deployment-error" class="error-text" role="alert"></p></form></dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="/app.js"></script><script src="/binding-ui.js"></script>
+</body></html>

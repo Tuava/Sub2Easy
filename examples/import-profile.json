@@ -1,0 +1,16 @@
+{
+  "profile_id": "openai-standard",
+  "revision": 1,
+  "instance_id": "primary",
+  "platform": "openai",
+  "account_type": "oauth",
+  "staging_group_id": 9001,
+  "target_group_ids": [1001],
+  "proxy_id": null,
+  "concurrency": 1,
+  "priority": 50,
+  "rate_multiplier": 1.0,
+  "fingerprint_mode": "off",
+  "account_expires_at": null,
+  "auto_pause_on_expired": true
+}
