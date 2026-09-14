@@ -52,6 +52,14 @@ class TaskPoolTests(unittest.TestCase):
         self.assertEqual(self.p.save({'max_workers':4,'max_authorizations':1})['runtime']['active'],0)
         with self.assertRaises(ValueError):self.p.save({'max_workers':0})
 
+    def test_discovered_cloud_id_reserved_until_worker_unwinds(self):
+        self.p.active={'one':{('local','a')},'two':{('local','b')}}
+        binding={'instance':'https://example.invalid','cloud_id':42}
+        self.p.reserve_binding('one',binding)
+        with self.assertRaisesRegex(ValueError,'OPERATION_RUNNING'):self.p.reserve_binding('two',binding)
+        self.p.active.pop('one');self.p.reserve_binding('two',binding)
+        self.assertIn(('cloud','https://example.invalid',42),self.p.active['two'])
+
 
 from copy import deepcopy
 from unittest.mock import patch

@@ -98,8 +98,10 @@ def candidates(account, clouds, used):
         m=metadata(cloud);reasons=[];conflicts=[];score=0
         matches_email=m['email']==account['login']['account']
         matches_workspace=bool(identity.get('chatgpt_account_id')) and identity['chatgpt_account_id']==m['workspace_id']
+        matches_user=bool(identity.get('chatgpt_user_id')) and identity['chatgpt_user_id']==m['user_id']
         name_match=m['name'].strip().casefold() in names
         if matches_workspace: reasons.append('workspace');score+=200
+        if matches_user: reasons.append('user_id');score+=200
         if matches_email: reasons.append('email');score+=100
         if name_match: reasons.append('name');score+=50
         delta=abs(m['created_at']-reference) if m['created_at'] is not None and reference else None

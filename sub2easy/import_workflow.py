@@ -185,6 +185,8 @@ class ImportWorkflow:
                 if a:
                     dep=a.get('deployment') or {}
                     if dep.get('job_id') and dep.get('job_id')==row.get('job_id'):
+                        item['operation']='create' if dep.get('new_account') else 'update_existing'
+                        item['matched_existing']=dep.get('matched_existing',False)
                         item['execution_profile']=profile_summary(dep['profile'])
                         error=dep.get('precheck_error') or {}
                         item['precheck_error']={k:error.get(k) for k in (

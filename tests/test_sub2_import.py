@@ -171,8 +171,23 @@ class ImportAPITests(unittest.TestCase):
         s.monitor.save_config({'enabled':True,'model_id':'test','confirm_auto_reauth':True})
         with patch('sub2easy.monitor.Client') as Client,patch.object(s.connector,'authorize') as auth:
             Client.return_value.accounts.return_value=[cloud];s.monitor.poll(force=True)
-            self.assertEqual(self.v.account(aid)['monitor']['state'],'login_material_missing');auth.assert_not_called()
+            self.assertEqual(self.v.account(aid)['monitor']['state'],'credentials_imported');auth.assert_not_called()
         self.assertEqual(self.v.jobs(),[])
+
+    def test_bound_completed_import_needs_explicit_update_permission(self):
+        self.send(item());aid=self.aid();a=self.v.account(aid)
+        self.v.update_account(aid,status='active',authorization=None,raw_result=None,
+                              binding={'cloud_id':42,'instance':'https://example.invalid/api/v1/admin','identity':a['authorization']['identity']},
+                              deployment={'state':'complete'})
+        self.assertEqual(self.send(item(token='NEW'))['results'][0]['code'],'SUB2_UPDATE_CONFIRM_REQUIRED')
+        self.assertEqual(self.send(item(token='NEW'),True)['updated'],1)
+        self.assertEqual(self.v.account(aid)['binding']['cloud_id'],42)
+
+    def test_old_applied_token_cannot_silently_skip_new_staged_token(self):
+        self.send(item());aid=self.aid();old=self.v.account(aid)['authorization']
+        self.v.update_account(aid,last_applied_auth_digest=self.v.authorization_digest(old))
+        self.assertEqual(self.send(item(token='NEW'),True)['updated'],1)
+        self.assertEqual(self.send(item())['results'][0]['code'],'SUB2_UPDATE_CONFIRM_REQUIRED')
 
     def test_import_errors_partial_valid_rows_retained(self):
         r=self.send(bundle(item(),{'platform':'grok','type':'oauth','credentials':{}},None))

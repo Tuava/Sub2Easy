@@ -118,11 +118,11 @@ class VaultAuditTests(unittest.TestCase):
                 self.assertEqual(self.v.import_materials(parse_batch(line()), PROFILE)['conflict_lines'], [1])
                 self.assertEqual(self.v.account(aid), before)
 
-    def test_completed_deployment_allows_missing_login_material_only(self):
+    def test_completed_deployment_allows_login_supplement_and_explicit_token_update(self):
         aid = self.add_json()
         self.v.update_account(aid, deployment={'state': 'complete'})
         self.assertEqual(self.v.import_materials(parse_batch(line()), PROFILE)['supplemented_lines'], [1])
-        self.assertEqual(self.import_json(oauth(token='NEW_TOKEN'), True)['results'][0]['code'], 'SUB2_ACCOUNT_BUSY')
+        self.assertEqual(self.import_json(oauth(token='NEW_TOKEN'), True)['results'][0]['code'], 'SUB2_IMPORTED')
 
     def test_binding_does_not_hide_stricter_cached_user_identity(self):
         aid = self.add_json()

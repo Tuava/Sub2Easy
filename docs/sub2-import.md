@@ -52,3 +52,8 @@ JSON-only 账号保存 `login.account` 身份，但不捏造 password/totp_secre
 覆盖单对象/多账号/多文件、无 header bundle、部分错误、批内冲突、库中去重、显式更新、workspace不符、密文存储、先TXT后JSON、先JSON后TXT、在途保护、无材料401处理。
 
 真实本地 HTTP 模拟测试直接从 JSON 导入入口开始，在没有密码/2FA/NVT Cookie 的条件下完成创建、停调度、SSE验号、移组、再次验号、启用和最终读回。不是用手工注入的本地授权对象代替 JSON 导入测试。未拿虚构 Token 或用户未选择的真实账号尝试生产部署。
+
+
+## v0.7.1 同身份凭据更新
+
+掉授权后获得新的sub2 JSON，勾选“更新同身份账号凭据”再提交。Token变了不是新账号；已有绑定更新原云端ID，未绑定且唯一身份匹配时自动绑定后更新。不同用户、不同workspace、多个候选不会自动选一个覆盖。完整流程和限制见 [existing-account-update.md](existing-account-update.md)。

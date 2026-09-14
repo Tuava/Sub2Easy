@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 import secrets
 import time
 
-from sub2easy.binding import candidates
+from sub2easy.binding import candidates, classify, metadata
 from sub2easy.lifecycle import ContractError, ImportProfile, OAuthIdentity, normalize_sub2json, plan_create, plan_reauthorize
 from sub2easy.monitor import config_fingerprint, guard_identity
 from sub2easy.nvtokens import ConnectorError
@@ -92,14 +92,25 @@ class DeploymentService:
                     raise VaultError('CLOUD_INSTANCE_CHANGED')
                 previous = a.get('deployment')
                 if previous and previous['state'] == 'complete':
-                    results.append({'account_id':aid,'state':'already_complete','cloud_id':previous.get('cloud_id')})
-                    continue
+                    # Completed deployment is not a permanent "done" flag. A new
+                    # explicitly imported authorization starts an update of the original ID.
+                    if not a.get('authorization'):
+                        results.append({'account_id':aid,'state':'already_complete','cloud_id':previous.get('cloud_id')})
+                        continue
+                    if not a.get('binding'):raise VaultError('CLOUD_BINDING_MISMATCH')
+                    previous = None
                 if previous:
                     if previous.get('mutation') or previous['state'] in {'unknown','review'}:
                         raise VaultError('DEPLOY_RESULT_NEEDS_REVIEW')
                     if (previous['instance'] != instance or previous['connection_revision'] != settings.get('cloud_revision','legacy')):
                         raise VaultError('DEPLOY_CONNECTION_CHANGED')
                     dep = deepcopy(previous)
+                    if (dep.get('new_account') and a.get('binding') and not dep.get('binding')
+                            and dep.get('step') in {'precheck','create'} and not dep.get('cloud_id')):
+                        # Manual disambiguation in BindingCenter selected the existing
+                        # identity; continue on that ID, never reset to create.
+                        dep.update(binding=deepcopy(a['binding']),cloud_id=a['binding']['cloud_id'],
+                                   new_account=False,step='precheck',matched_existing=True)
                     if replaceable_precheck(a) and dep['profile']!=asdict(profile):
                         if not staging_verified:
                             raise VaultError('STAGING_ISOLATION_CONFIRMATION_REQUIRED')
@@ -118,7 +129,7 @@ class DeploymentService:
                 else:
                     if a['status'] in {'unknown','write_unknown','review'}:
                         raise VaultError('RESULT_REVIEW_REQUIRED_BEFORE_RETRY')
-                    if not a.get('binding') and not staging_verified:
+                    if not a.get('binding') and not a.get('authorization') and not staging_verified:
                         raise VaultError('STAGING_ISOLATION_CONFIRMATION_REQUIRED')
                     dep = {'id':secrets.token_hex(16),'step':'precheck','state':'queued','created':time.time(),
                            'instance':instance,'connection_revision':settings.get('cloud_revision','legacy'),
@@ -126,6 +137,8 @@ class DeploymentService:
                            'new_account':not bool(a.get('binding')),'binding':deepcopy(a.get('binding')),
                            'cloud_id':(a.get('binding') or {}).get('cloud_id'),'mutation':None,
                            'staging_verified':staging_verified,'auth_attempts':0,'history':[]}
+                    if a.get('deployment') and a['deployment'].get('state')=='complete':
+                        dep['supersedes']=a['deployment']['id']
                 with self.vault.transaction():
                     dep['auto_monitor'] = auto_monitor
                     if auto_monitor:
@@ -223,6 +236,9 @@ class DeploymentService:
                 self.vault.job_stage(job['id'],step)
                 if step == 'precheck':
                     if dep['new_account']:
+                        # Existing identity routing precedes new-account template checks.
+                        # Updating the original account does not need a new staging group.
+                        if self._check_duplicates(a,dep):continue
                         if not dep['staging_verified']:raise VaultError('STAGING_ISOLATION_CONFIRMATION_REQUIRED')
                         choices=self.service.options()
                         profile=ImportProfile.from_dict(dep['profile'])
@@ -238,7 +254,6 @@ class DeploymentService:
                                 'missing_target_group_ids':[],'missing_proxy_id':profile.proxy_id})
                             raise VaultError('SELECTED_PROXY_UNAVAILABLE')
                         self._save(aid,dep,precheck_error=None)
-                        self._check_duplicates(a,dep)
                     else:
                         c=self.service.cloud_read(f"/accounts/{dep['cloud_id']}");guard_identity(c,dep['binding'])
                         self._guard(aid,dep)
@@ -247,6 +262,11 @@ class DeploymentService:
                         if not isinstance(c.get('updated_at'),str) or not c['updated_at']:
                             raise VaultError('CLOUD_REVISION_REQUIRED')
                         self._save(aid,dep,baseline=fingerprint(c),initial_schedulable=c['schedulable'])
+                        replacement=a.get('credential_update_guard')
+                        if replacement and (replacement['binding']!=dep['binding']
+                                or replacement['base']!=config_fingerprint(c)
+                                or (replacement['require_paused'] and c['schedulable'])):
+                            raise VaultError('CLOUD_CHANGED_DURING_RECOVERY')
                     self._save(aid,dep,step='authorize' if dep['new_account'] else 'pause')
                 elif step == 'authorize':
                     if not dep['new_account']:
@@ -285,14 +305,15 @@ class DeploymentService:
                 elif step == 'create':
                     auth=self._authorization(a,dep)
                     if auth is None:raise VaultError('TOKEN_EXPIRED_OR_TOO_CLOSE')
-                    self._check_duplicates(a,dep)  # authorization may have changed available identity evidence
+                    if self._check_duplicates(a,dep):continue  # a matching account may have appeared during login
                     plan=plan_create(auth,ImportProfile.from_dict(dep['profile']),aid)
                     created=self._mutate(aid,dep,'create','/accounts',plan.body)
                     if not isinstance(created,dict) or type(created.get('id')) is not int or created['id']<=0:
                         raise VaultError('CLOUD_WRITE_RESULT_UNKNOWN')
                     binding={'cloud_id':created['id'],'instance':dep['instance'],'identity':asdict(auth.identity)}
                     confirmed={**dep,'binding':binding,'cloud_id':created['id'],'step':'pause_new',
-                               'mutation':None,'updated':time.time()}
+                               'mutation':None,'updated':time.time(),
+                               'applied_auth_digest':self.vault.authorization_digest(a['authorization'])}
                     # One local transaction: never persist a new binding with an
                     # old create checkpoint that cannot pass the retry guard.
                     self.vault.update_account(aid,binding=binding,deployment=confirmed)
@@ -336,12 +357,21 @@ class DeploymentService:
                     if c['updated_at']!=dep.get('pause_revision'):raise VaultError('DEPLOY_CONFIG_CHANGED')
                     plan=plan_reauthorize(c,auth,dep['cloud_id'],OAuthIdentity(**dep['binding']['identity']))
                     self._mutate(aid,dep,'apply',f"/accounts/{dep['cloud_id']}/apply-oauth-credentials",plan.body)
-                    self._save(aid,dep,mutation=None,step='verify')
+                    # Do not trust a 200 that ignored the new credentials. Keep
+                    # mutation unresolved until the original account reads back.
+                    applied=self._read(aid,dep)
+                    if (applied['schedulable'] or any((applied.get('credentials') or {}).get(k)!=v
+                                                    for k,v in plan.body['credentials'].items()
+                                                    if k in {'access_token','refresh_token','chatgpt_account_id','chatgpt_user_id'})):
+                        raise VaultError('CLOUD_WRITE_RESULT_UNKNOWN')
+                    self._save(aid,dep,mutation=None,step='verify',
+                               applied_auth_digest=self.vault.authorization_digest(a['authorization']))
                 elif step == 'verify':
                     c=self._read(aid,dep)
                     if c['schedulable']:raise VaultError('DEPLOY_CONFIG_CHANGED')
                     self._guard(aid,dep)
-                    self.service.monitor.probe(dep['cloud_id'],dep['model_id'])
+                    if self.service.monitor.probe(dep['cloud_id'],dep['model_id']) is not True:
+                        raise VaultError('PROBE_FAILED')
                     c=self._read(aid,dep);check_ready(c)
                     self._save(aid,dep,verified_at=time.time(),verified_revision=c['updated_at'],
                                step='promote' if dep['new_account'] and not dep.get('promoted') else 'enable')
@@ -368,7 +398,9 @@ class DeploymentService:
                         self.service.monitor.enroll_deployed(aid,dep,c)
                         dep['history'].append({'stage':'complete','at':time.time()})
                         self._save(aid,dep,step='complete',state='complete',code='DEPLOYED_AND_ENABLED')
-                        self.vault.update_account(aid,status='active',authorization=None,raw_result=None)
+                        self.vault.update_account(aid,status='active',authorization=None,raw_result=None,
+                                                  last_applied_auth_digest=dep.get('applied_auth_digest'),
+                                                  credential_update_guard=None)
                 else:raise VaultError('DEPLOY_INVALID_STEP')
                 self._save(aid,dep,history=(dep['history']+[{'stage':step,'at':time.time()}])[-60:])
             self.vault.finish(job['id'],'succeeded','DEPLOYED_AND_ENABLED','complete')
@@ -385,9 +417,43 @@ class DeploymentService:
         s=self.service.cloud()
         clouds=Client(s['sub2api_url'],s['admin_key']).accounts(platform='openai')
         self._guard(a['id'],dep)
-        if any('email' in c['reasons'] or 'name' in c['reasons']
-               for c in candidates(a,clouds,{})):
-            raise VaultError('DEPLOY_BIND_EXISTING_FIRST')
+        with self.service.operation:
+            self._guard(a['id'],dep)
+            used={x['binding']['cloud_id']:x['id'] for x in self.vault.accounts()
+                  if x.get('binding') and x['binding']['instance']==dep['instance']}
+            related=[c for c in candidates(a,clouds,used)
+                     if set(c['reasons']) & {'email','name','user_id'}]
+            if not related:return False
+            classification,chosen=classify(related)
+            # Without local workspace identity (TXT-only), never use email/name alone
+            # to choose a workspace for a login or overwrite another user's credentials.
+            if not a.get('authorization') or classification!='ready':
+                code='DEPLOY_BIND_EXISTING_FIRST' if not a.get('authorization') else (
+                    'MULTIPLE_CLOUD_MATCHES' if classification=='ambiguous' else 'CLOUD_MATCH_CONFLICT')
+                report=self.service.bindings.report()
+                retained=[r for r in report['items'] if r['account_id']!=a['id']] if report else []
+                self.service.bindings.save_report({'instance':dep['instance'],
+                    'connection_revision':dep['connection_revision'],'created_at':time.time(),
+                    'items':retained+[{'account_id':a['id'],'status':'ambiguous' if classification=='ambiguous' else 'conflict',
+                                      'code':code,'candidates':related,
+                                      'local':{'label':a['login']['account'],'imported_at':a.get('imported_at'),'revision':a['revision']}}]})
+                raise VaultError(code)
+            identity=a['authorization']['identity']
+            binding={'cloud_id':chosen['id'],'instance':dep['instance'],'identity':deepcopy(identity)}
+            # Re-read the exact selected ID, not an arbitrary list row, before persisting the binding.
+            cloud=self.service.cloud_read(f"/accounts/{chosen['id']}")
+            self._guard(a['id'],dep);guard_identity(cloud,binding)
+            if metadata(cloud)['fingerprint']!=chosen['fingerprint']:raise VaultError('CLOUD_CANDIDATE_CHANGED')
+            if cloud.get('status') not in {'active','error'} or type(cloud.get('schedulable')) is not bool:
+                raise VaultError('CLOUD_ACCOUNT_ON_HOLD')
+            if not cloud.get('updated_at'):raise VaultError('CLOUD_REVISION_REQUIRED')
+            self.service.tasks.reserve_binding(dep['job_id'],binding)
+            updated={**dep,'binding':binding,'cloud_id':chosen['id'],'new_account':False,
+                     'step':'precheck','matched_existing':True,'updated':time.time()}
+            # Binding + transition commit together; crash cannot go back to create.
+            self.vault.update_account(a['id'],binding=binding,deployment=updated)
+            dep.update(updated)
+            return True
 
     def _before_enable(self,aid,dep):
         c=self._read(aid,dep);check_ready(c)

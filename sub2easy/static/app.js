@@ -143,7 +143,7 @@ const messages = {
   MANUALLY_BOUND:'已按你的选择绑定，并重新核对云端身份。',
   BINDING_ALREADY_EXISTS:'已存在绑定，本次跳过。',BINDING_REPORT_STALE:'绑定列表或站点配置已变化，请重新扫描。',
   DEPLOY_MODEL_REQUIRED:'请填写可用的验号模型 ID。',
-  DEPLOY_BIND_EXISTING_FIRST:'发现同邮箱/同创建标识的云端账号，请先用批量绑定核对，不能再建一个号。',
+  DEPLOY_BIND_EXISTING_FIRST:'云端已有账号，但当前材料还不足以确定原workspace。请在绑定处理中心选择原账号，或导入包含身份字段的新sub2 JSON。',
   DEPLOY_RESULT_NEEDS_REVIEW:'上次创建、授权或写入结果不明，已保留云端 ID 和阶段，不会重复建号。',
   DEPLOY_CONFIG_CHANGED:'导入期间云端配置或调度状态发生变化，已停止后续写入。',
   DEPLOY_CONNECTION_CHANGED:'任务的目标站点或管理员 Key 已变化，不能把任务发到新站点。',
@@ -164,8 +164,8 @@ const messages = {
   SUB2_EMAIL_REQUIRED:'credentials.email缺失或无效，无法建立稳定身份映射。',
   SUB2_CONFLICTING_ACCOUNT:'同邮箱有不同workspace或不同凭据，未擅自选择，请拆分核对。',
   SUB2_IDENTITY_CONFLICT:'本地已有同邮箱的不同workspace或用户，未覆盖。',
-  SUB2_ACCOUNT_BUSY:'账号存在进行中任务、恢复待办或部署记录，不能直接替换凭据。',
-  SUB2_UPDATE_CONFIRM_REQUIRED:'本地已有不同Token；核对同一身份后勾选“更新本地已有凭据”再保存。',
+  SUB2_ACCOUNT_BUSY:'账号正在处理、存在未知写入或不可替换的恢复记录，未覆盖凭据。已完成部署不再阻止新Token导入。',
+  SUB2_UPDATE_CONFIRM_REQUIRED:'已有同身份账号。请勾选“更新同身份账号凭据”；提交后更新原云端ID，不创建第二个账号。',
   SUB2_INPUT_TOO_LARGE:'JSON输入不得超过2 MiB。',SUB2_TOO_MANY_ACCOUNTS:'每批最多1000个账号。',
   SUB2_NO_ACCOUNTS:'文件没有账号。',SUB2_IMPORTED:'sub2凭据已加密导入。',
   SUB2_AMBIGUOUS_SUMMARY:'单身份summary不能对应多个账号，请核对包装结构。',
@@ -179,6 +179,7 @@ const messages = {
 const monitorNames={watching:'监控中',disabled:'已关闭',refresh_grace:'401 掉授权 · 等待刷新',queued:'401 修复已排队',continuation_queued:'续跑已排队（不重新登录）',retry_wait:'临时读取失败 · 等待续跑',reauth_retry_wait:'验号401 · 自动重授权等待中',waiting_connector:'等待连接器恢复 · 自动保留任务',pausing:'正在确认停调度',reauthorizing:'正在重授权',applying:'正在更新原账号',verifying:'正在验号',resuming:'正在恢复调度',recovered:'已恢复',recovered_paused:'授权已修复 · 仍停调度',needs_attention:'需要处理',manual_hold:'旧版暂停判断 · 待重新检查',account_disabled:'云端已停用 · 不自动处理',paused_unknown:'停止调度 · 原因待确认',state_unknown:'账号/调度状态未知',remote_missing:'云端账号未找到',binding_conflict:'绑定不匹配',rate_budget:'等待小时预算',waiting_new_evidence:'等待新证据',paused:'监控暂停',checking:'检查中',no_managed_accounts:'未选择托管账号'};
 const errorText = code => messages[code] || `操作未完成：${code || 'UNKNOWN_ERROR'}`;
 Object.assign(monitorNames,{retirement_waiting:'已停止重登 · 等待测试组',retirement_queued:'测试组清理排队中',retirement_failed:'清理未完成',retired:'已移测试组',retirement_pause:'停止调度',retirement_move:'移入测试组',retirement_confirm:'确认清理结果'});
+monitorNames.credentials_imported='新凭据已导入 · 待应用到原账号';
 monitorNames.login_material_missing='401 · 缺少登录材料，无法完整重授权';
 const text = (tag, content, className) => { const n=document.createElement(tag);n.textContent=content;if(className)n.className=className;return n; };
 function toast(message) { $('toast').textContent=message;$('toast').hidden=false;clearTimeout(timer);timer=setTimeout(()=>{$('toast').hidden=true;},6500); }
@@ -345,7 +346,8 @@ function renderAccounts(){
     const controls=document.createElement('td');const row=document.createElement('div');row.className='row-actions';
     const pending=state.jobs.some(j=>j.account_id===a.id&&['queued','running'].includes(j.state));
     const blocked=!!a.retirement?.state||a.deployment?.state==='unknown'||a.deployment?.state==='review'||a.status==='unknown'||a.status==='write_unknown'||a.status==='review';
-    const deploy=button(a.status==='retired'?'已移测试组':a.deployment?.state==='complete'?'已完成上线':a.deployment?.state&&a.deployment.state!=='complete'?'继续导入':'导入服务器并上线',()=>openDeployment([a.id]));deploy.disabled=pending||blocked||a.deployment?.state==='complete';
+    const hasNewAuth=a.validated&&a.status==='authorized';
+    const deploy=button(a.status==='retired'?'已移测试组':hasNewAuth&&a.binding?'更新原账号 #'+a.binding.cloud_id:a.deployment?.state==='complete'?'已完成上线':a.deployment?.state&&a.deployment.state!=='complete'?'继续导入':'导入服务器并上线',()=>openDeployment([a.id]));deploy.disabled=pending||blocked||(a.deployment?.state==='complete'&&!hasNewAuth);
     deploy.title=pending?'已有任务执行中':blocked?'先核对失败原因，未知写入不能重复提交':'授权、服务器写入、验号、移组和启用会自动完成';row.append(deploy);
     const more=document.createElement('details');more.className='row-more';const summary=text('summary','更多');summary.setAttribute('aria-label',a.label+'的更多操作');more.append(summary);
     const menu=document.createElement('div');menu.className='row-more-menu';more.append(menu);
@@ -580,11 +582,13 @@ function renderImportBatch(){
     const result=document.createElement('td');result.className='inline-result';
     const label=r.state==='local_saved'?'已保存本地 · 尚未上传':r.state==='succeeded'?'已在服务器上线':r.state==='already_complete'?'原任务已完成':r.state==='queued'?'已保存本地，等待上传':r.state==='running'?'正在导入服务器':r.state==='skipped'?'重复项，已跳过':errorText(r.code);
     result.append(text('span',label));tr.append(result);
-    if(r.execution_profile){const p=r.execution_profile;result.append(text('small',`执行模板 ${p.profile_id} v${p.revision} · 隔离 #${p.staging_group_id} → 生产 ${(p.target_group_ids||[]).map(id=>'#'+id).join('、')} · 代理 ${p.proxy_id?'#'+p.proxy_id:'直连'}`));}
+    if(r.operation==='update_existing')result.append(text('small',`更新原账号 #${r.cloud_id||'—'} · 保留云端原分组/代理/指纹 · 不创建新号`));
+    if(r.execution_profile&&r.operation!=='update_existing'){const p=r.execution_profile;result.append(text('small',`执行模板 ${p.profile_id} v${p.revision} · 隔离 #${p.staging_group_id} → 生产 ${(p.target_group_ids||[]).map(id=>'#'+id).join('、')} · 代理 ${p.proxy_id?'#'+p.proxy_id:'直连'}`));}
     const e=r.precheck_error;if(e){const missing=[e.missing_staging_group_id?'隔离组 #'+e.missing_staging_group_id:'',...(e.missing_target_group_ids||[]).map(id=>'生产组 #'+id),e.missing_proxy_id?'代理 #'+e.missing_proxy_id:''].filter(Boolean);if(missing.length)result.append(text('small','当前不可用：'+missing.join('、'),'error-text'));}
     if(['succeeded','already_complete'].includes(r.state))result.append(text('small',monitorLabel({monitor:{enabled:r.monitor_enabled,state:'watching',enrollment_code:r.monitor_code},has_login_material:r.has_login_material})));
     const ops=document.createElement('td');
     if(r.job_id&&['queued','running'].includes(r.state)){const b=button(r.cancel_requested?'停止已请求':'停止本项',async()=>{await api(`jobs/${r.job_id}/cancel`,{});await loadImportBatch();});b.disabled=!!r.cancel_requested;ops.append(b);}
+    if(['DEPLOY_BIND_EXISTING_FIRST','MULTIPLE_CLOUD_MATCHES','CLOUD_MATCH_CONFLICT'].includes(r.code))ops.append(button('查看并选择原账号',()=>goto('bindings')));
     if(r.account_id&&['failed','cancelled'].includes(r.state)&&!['failed','conflict'].includes(r.intake_state))ops.append(button('重试本项',async()=>{importBatch=await api(`import/batch/${importBatch.id}/retry`,{indices:[r.index]});renderImportBatch();}));
     tr.append(ops);$('import-batch-rows').append(tr);
   }

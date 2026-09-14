@@ -57,6 +57,16 @@ class TaskPool:
         with self.mutex:
             return any(keys & value for value in self.active.values())
 
+    def reserve_binding(self, job_id, binding):
+        """Add a discovered cloud ID to the running job without racing another owner."""
+        key=('cloud',binding['instance'],binding['cloud_id'])
+        with self.mutex:
+            if any(key in keys for jid,keys in self.active.items() if jid!=job_id):
+                raise VaultError('OPERATION_RUNNING')
+            # run_one/dispatch establish reservations. Do not invent an untracked owner.
+            if job_id not in self.active:raise VaultError('OPERATION_RUNNING')
+            self.active[job_id].add(key)
+
     def claim(self):
         # Same short coordinator as foreground queue/bind operations; never held
         # by workers across HTTP. Do not claim ahead of available capacity.

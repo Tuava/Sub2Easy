@@ -1,7 +1,7 @@
 'use strict';
 let bindingReport=null,bindingRow=null,bindingBusy=false,cloudResult=null,cloudPage=1,cloudRequest=0,reportRequest=0;
 const resultNames={bound:'绑定成功',already_bound:'已有绑定',ready:'唯一匹配',ambiguous:'多个候选',not_found:'未找到',conflict:'有冲突',failed:'失败'};
-const reasonNames={workspace:'workspace 一致',email:'邮箱一致',name:'名称一致',near_time:'创建时间接近'};
+const reasonNames={user_id:'上游用户 UID 一致',workspace:'workspace 一致',email:'邮箱一致',name:'名称一致',near_time:'创建时间接近'};
 function detailedDate(ts){return ts?new Date(ts*1000).toLocaleString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'未知';}
 function optionSet(id,items,prefix){const s=$(id),old=s.value;s.replaceChildren(...prefix.map(([value,label])=>new Option(label,value)));for(const [value,label] of items)s.add(new Option(label,value));if([...s.options].some(o=>o.value===old))s.value=old;}
 function localFilterOptions(){

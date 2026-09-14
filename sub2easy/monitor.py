@@ -641,6 +641,11 @@ class AccountMonitor:
                     self.record(a['id'],last_check=now,cloud_status=cloud.get('status'),
                                 cloud_schedulable=cloud.get('schedulable') if type(cloud.get('schedulable')) is bool else None,
                                 auth_401=signal is not None)
+                    if a.get('authorization') and a.get('result_code')=='SUB2_IMPORTED':
+                        # New credentials are staged explicitly by the operator;
+                        # don't throw them away by starting another automatic login.
+                        self.record(a['id'],state='credentials_imported',last_code='SUB2_IMPORTED')
+                        continue
                     if self._dispatch_probe_reauth(a,cloud,cfg,now):
                         if self.vault.account(a['id'])['monitor'].get('state')=='waiting_connector':
                             runtime.update(state='paused',last_code='CONFIGURE_OR_RENEW_COOKIE')

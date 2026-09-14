@@ -416,7 +416,8 @@ class DesktopService:
                 raise VaultError("CLOUD_IDENTITY_MISMATCH")
             intent["state"] = "confirmed"
             self.vault.update_account(account_id, status="cloud_paused", binding=binding, write_intent=intent,
-                                      authorization=None, raw_result=None)
+                                      authorization=None, raw_result=None,
+                                      last_applied_auth_digest=self.vault.authorization_digest(a['authorization']))
         except Exception:
             intent["state"] = "unknown"
             self.vault.update_account(account_id, status="write_unknown", write_intent=intent)

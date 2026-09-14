@@ -342,3 +342,24 @@ test('update check displays version and manual command without calling install',
   assert.deepEqual(paths,['/api/updates/check']);
  }finally{t.close();}
 });
+
+test('fresh credentials on completed account expose update original ID action',async()=>{
+ const t=await setup();try{
+  t.w.eval(`state.accounts[0].deployment={state:'complete',step:'complete'};state.accounts[0].validated=true;state.accounts[0].status='authorized';renderAccounts();`);
+  const button=[...t.w.document.querySelectorAll('#account-rows button')].find(b=>b.textContent==='更新原账号 #42');
+  assert.ok(button);assert.equal(button.disabled,false);
+ }finally{t.close();}
+});
+test('existing account batch labels actual update not the new-account template groups',async()=>{
+ const t=await setup();try{
+  t.w.eval(`importBatch={id:'synthetic-batch',instance:state.settings.instance,profile:state.profile,items:[{index:1,account_id:'local-1',label:'demo@example.invalid',state:'running',operation:'update_existing',cloud_id:42,execution_profile:state.profile}]};renderImportBatch();`);
+  const body=t.w.document.querySelector('#import-batch-rows').textContent;
+  assert.match(body,/更新原账号 #42/);assert.match(body,/保留云端原分组/);assert.doesNotMatch(body,/隔离 #1/);
+ }finally{t.close();}
+});
+test('ambiguous existing identity links to selection instead of repeated create',async()=>{
+ const t=await setup();try{
+  t.w.eval(`importBatch={id:'synthetic-batch',instance:state.settings.instance,profile:state.profile,items:[{index:1,account_id:'local-1',intake_state:'added',state:'failed',code:'MULTIPLE_CLOUD_MATCHES'}]};renderImportBatch();`);
+  assert.ok([...t.w.document.querySelectorAll('#import-batch-rows button')].some(b=>b.textContent==='查看并选择原账号'));
+ }finally{t.close();}
+});

@@ -263,9 +263,44 @@ class Vault:
         monitor = account.get('monitor') or {}
         return (self.runtime_busy({**account,'id':account_id}) or self.pending(account_id) or bool(monitor.get('owned_pause'))
                 or bool(monitor.get('blocked')) or bool(account.get('retirement'))
+                or (account.get('schedule_intent') or {}).get('state') in {'pending','unknown'}
                 or bool(account.get('deployment') and
                         (not allow_completed or account['deployment'].get('state')!='complete'))
                 or bool(account.get('write_intent') and account['write_intent'].get('state') != 'confirmed'))
+
+    def credential_replacement(self, aid, account, status, confirmed):
+        """Permit an explicit same-identity import after a known failed attempt.
+
+        Unknown writes, retirement and in-flight work are never cleared. Preserve
+        the old pause/configuration baseline for a fresh read before applying.
+        """
+        if (not confirmed or status not in {'failed','review'} or not account.get('binding')
+                or self.pending(aid) or self.runtime_busy({**account,'id':aid}) or account.get('retirement')
+                or (account.get('write_intent') or {}).get('state') not in {None,'confirmed'}
+                or (account.get('schedule_intent') or {}).get('state') in {'pending','unknown'}):return None
+        dep=account.get('deployment') or {};m=account.get('monitor') or {}
+        if dep.get('mutation') or dep.get('state') in {'unknown','review'}:return None
+        known={'INCORRECT_CODE','INVALID_PASSWORD','LOGIN_FAILED','INVALID_CREDENTIALS',
+               'PROBE_AUTH_401','PROBE_FAILED','PROBE_INCOMPLETE','REAUTH_STILL_UNAUTHORIZED'}
+        code=m.get('last_code') or dep.get('code') or account.get('result_code')
+        if code not in known:return None
+        owner=m.get('owned_pause') or {};cp=m.get('continuation') or {}
+        if owner and owner.get('state')!='confirmed':return None
+        baseline=cp.get('base') or owner.get('baseline') or dep.get('baseline')
+        if not baseline:return None
+        return {'base':baseline,'require_paused':True,'binding':account['binding']}
+
+    def replaceable_unbound_import(self, aid, account, status, confirmed):
+        dep=account.get('deployment') or {};m=account.get('monitor') or {}
+        return (confirmed and status=='failed' and not account.get('binding')
+                and not self.pending(aid) and not self.runtime_busy({**account,'id':aid})
+                and not account.get('retirement') and not account.get('write_intent')
+                and not m.get('owned_pause') and not m.get('blocked')
+                and dep.get('new_account') is True and dep.get('state')=='failed'
+                and dep.get('step') in {'precheck','create'} and not dep.get('mutation')
+                and not dep.get('cloud_id') and not dep.get('binding')
+                and dep.get('code') in {'DEPLOY_BIND_EXISTING_FIRST','MULTIPLE_CLOUD_MATCHES',
+                                       'CLOUD_MATCH_CONFLICT','SELECTED_GROUP_UNAVAILABLE','SELECTED_PROXY_UNAVAILABLE'})
 
     def import_sub2(self, batch, profile, update_credentials=False):
         """Same email-key as text intake; changes never write to the cloud."""
@@ -288,15 +323,31 @@ class Vault:
                            for expected in identities):
                         results.append({'index':item.index,'state':'conflict','code':'SUB2_IDENTITY_CONFLICT','account_id':aid})
                         continue
-                    if old.get('authorization') == auth:
+                    if (old.get('authorization') == auth or
+                            (not old.get('authorization') and old.get('last_applied_auth_digest') and
+                             hmac.compare_digest(old['last_applied_auth_digest'],self.authorization_digest(auth)))):
                         results.append({'index':item.index,'state':'duplicate','code':'SUB2_ALREADY_IMPORTED','account_id':aid})
                         continue
-                    if self._import_busy(aid,old) or row[2] in {'review','unknown','write_unknown'}:
+                    replacement=self.credential_replacement(aid,old,row[2],update_credentials)
+                    unbound_replacement=self.replaceable_unbound_import(aid,old,row[2],update_credentials)
+                    if not replacement and not unbound_replacement and (self._import_busy(aid,old,allow_completed=True) or row[2] in {'review','unknown','write_unknown'}):
                         results.append({'index':item.index,'state':'conflict','code':'SUB2_ACCOUNT_BUSY','account_id':aid})
                         continue
-                    if old.get('authorization') and not update_credentials:
+                    if (old.get('authorization') or old.get('binding')) and not update_credentials:
                         results.append({'index':item.index,'state':'conflict','code':'SUB2_UPDATE_CONFIRM_REQUIRED','account_id':aid})
                         continue
+                    if replacement:
+                        old['credential_update_guard']=replacement
+                        old['replaced_recovery']={'monitor':old.get('monitor'),'deployment':old.get('deployment')}
+                        old['monitor']={**old.get('monitor',{}),'blocked':False,'owned_pause':None,
+                                        'continuation':None,'automatic_reauth':None,'next_retry':None,
+                                        'state':'credentials_imported','last_code':'SUB2_IMPORTED'}
+                        # A fresh explicit apply replaces an old failed checkpoint,
+                        # but not its preserved identity/configuration evidence above.
+                        if old.get('deployment') and old['deployment'].get('state')!='complete':old['deployment']=None
+                    if unbound_replacement:
+                        old['replaced_deployment']=old['deployment']
+                        old['deployment']=None
                     old.update(authorization=auth, raw_result=item.document, result_code='SUB2_IMPORTED',
                                source='sub2_json+login' if has_login_material(old['login']) else 'sub2_json')
                     self.db.execute("UPDATE accounts SET payload=?,revision=revision+1,status='authorized',updated=? WHERE id=?",
@@ -317,6 +368,11 @@ class Vault:
                 'duplicates':sum(r['state']=='duplicate' for r in results),
                 'failed':sum(r['state'] in {'failed','conflict'} for r in results),
                 'ignored_proxies':batch.ignored_proxies,'results':results}
+
+    def authorization_digest(self, authorization):
+        """Remember applied credentials without keeping an extra plaintext/token copy."""
+        return hmac.new(self.require_key(),b'applied-auth\0'+json.dumps(authorization,sort_keys=True).encode(),
+                        hashlib.sha256).hexdigest()
 
     def account(self, account_id):
         with self.mutex:

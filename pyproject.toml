@@ -1,6 +1,6 @@
 [project]
 name = "sub2easy"
-version = "0.7.0"
+version = "0.7.1"
 description = "Local account-pool operations console for sub2api"
 readme = "README.md"
 license = "MIT"

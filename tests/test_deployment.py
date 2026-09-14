@@ -224,8 +224,138 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(self.v.jobs()[0]['code'],'DEPLOY_BIND_EXISTING_FIRST')
         self.assertEqual(self.calls,[]);self.auth.assert_not_called()
 
+    def test_imported_auth_automatically_binds_unique_existing_and_updates(self):
+        self.remote[55]=account(55);before=deepcopy(self.remote[55]);self.cached()
+        self.queue();self.s.run_one()
+        self.assertEqual(self.v.jobs()[0]['state'],'succeeded',self.v.jobs()[0])
+        self.assertEqual(self.v.account(self.id)['binding']['cloud_id'],55)
+        self.assertTrue(self.v.account(self.id)['deployment']['matched_existing'])
+        self.assertFalse(any(c[1]=='/accounts' or c[0]=='PUT' for c in self.calls))
+        self.auth.assert_not_called();self.options.assert_not_called()
+        for k in ('group_ids','proxy_id','extra','priority','concurrency','rate_multiplier'):
+            self.assertEqual(self.remote[55][k],before[k])
+
+    def test_multiple_existing_exact_identities_report_candidates_without_writing(self):
+        self.remote={55:account(55),56:account(56)};self.cached();self.queue();self.s.run_one()
+        self.assertEqual(self.v.jobs()[0]['code'],'MULTIPLE_CLOUD_MATCHES')
+        self.assertEqual(self.calls,[]);self.auth.assert_not_called()
+        rows=self.s.bindings.report()['items'][0]['candidates'];self.assertEqual({r['id'] for r in rows},{55,56})
+
+    def test_matching_existing_owner_is_not_rebound_to_another_local_record(self):
+        other=self.add('other@example.invalid')
+        self.v.update_account(other,binding={'instance':PROFILE['instance_id'],'cloud_id':55,
+                                           'identity':authorization().authorization['identity']})
+        self.remote[55]=account(55);self.cached();self.queue();self.s.run_one()
+        self.assertEqual(self.v.jobs()[0]['code'],'CLOUD_MATCH_CONFLICT');self.assertEqual(self.calls,[])
+
+    def test_same_uid_different_workspace_or_email_does_not_create_new(self):
+        for field,value in [('chatgpt_account_id','personal-workspace'),('email','alias@example.invalid')]:
+            self.remote={55:account(55)};self.remote[55]['credentials'][field]=value
+            self.cached();self.queue();self.s.run_one()
+            self.assertEqual(self.v.jobs()[0]['code'],'CLOUD_MATCH_CONFLICT');self.assertEqual(self.calls,[])
+
+    def test_selected_candidate_changed_after_list_never_applies(self):
+        self.remote[55]=account(55);self.cached()
+        def changed(path):
+            c=self.cloud_read(path);c['credentials']['chatgpt_account_id']='changed';return c
+        self.read.side_effect=changed;self.queue();self.s.run_one()
+        self.assertEqual(self.v.jobs()[0]['code'],'CLOUD_IDENTITY_MISMATCH');self.assertEqual(self.calls,[])
+
+    def test_completed_account_accepts_new_json_and_updates_not_creates_again(self):
+        self.cached();self.queue();self.s.run_one();self.calls.clear()
+        before=deepcopy(self.remote[42]);document=authorization().raw
+        document['credentials']['access_token']='NEW_ACCESS'
+        r=self.client.post('/api/import',json={'format':'sub2','text':json.dumps(document),'profile':PROFILE,
+                                              'update_credentials':True})
+        self.assertEqual(r.status_code,200,r.text);self.assertEqual(r.json()['updated'],1)
+        self.assertEqual(self.queue()['items'][0]['state'],'queued');self.s.run_one()
+        self.assertEqual(self.v.jobs()[0]['state'],'succeeded');self.auth.assert_not_called()
+        self.assertEqual(self.remote[42]['credentials']['access_token'],'NEW_ACCESS')
+        self.assertFalse(any(c[1]=='/accounts' or c[0]=='PUT' for c in self.calls))
+        self.assertEqual(len(self.remote),1)
+        for k in ('group_ids','proxy_id','extra'):self.assertEqual(self.remote[42][k],before[k])
+        r=self.client.post('/api/import',json={'format':'sub2','text':json.dumps(document),'profile':PROFILE,
+                                              'update_credentials':True})
+        self.assertEqual(r.json()['duplicates'],1)
+        self.assertEqual(self.queue()['items'][0]['state'],'already_complete')
+
+    def test_failed_probe_accepts_explicit_same_identity_auth_with_pause_baseline(self):
+        self.bind_existing();self.cached();self.probe.side_effect=VaultError('PROBE_AUTH_401')
+        self.queue();self.s.run_one()
+        document=authorization().raw;document['credentials']['access_token']='NEW_ACCESS'
+        r=self.client.post('/api/import',json={'format':'sub2','text':json.dumps(document),'profile':PROFILE,
+                                              'update_credentials':True})
+        self.assertEqual(r.json()['updated'],1,r.text)
+        self.probe.side_effect=self.probe_ok;self.queue();self.s.run_one()
+        self.assertEqual(self.v.jobs()[0]['state'],'succeeded');self.auth.assert_not_called()
+        self.assertEqual(self.remote[42]['credentials']['access_token'],'NEW_ACCESS')
+        self.assertFalse(any(c[1]=='/accounts' or c[0]=='PUT' for c in self.calls))
+
+    def test_reimport_cannot_bypass_changed_cloud_recovery_baseline(self):
+        self.bind_existing();self.cached();self.probe.side_effect=VaultError('PROBE_AUTH_401')
+        self.queue();self.s.run_one();self.calls.clear()
+        document=authorization().raw;document['credentials']['access_token']='NEW_ACCESS'
+        r=self.client.post('/api/import',json={'format':'sub2','text':json.dumps(document),'profile':PROFILE,
+                                              'update_credentials':True})
+        self.assertEqual(r.json()['updated'],1)
+        self.remote[42]['proxy_id']=999;self.queue();self.s.run_one()
+        self.assertEqual(self.v.jobs()[0]['code'],'CLOUD_CHANGED_DURING_RECOVERY');self.assertEqual(self.calls,[])
+
+    def test_false_probe_return_never_enables(self):
+        self.bind_existing();self.cached();self.probe.side_effect=None;self.probe.return_value=False
+        self.queue();self.s.run_one()
+        self.assertEqual(self.v.jobs()[0]['code'],'PROBE_FAILED');self.assertFalse(self.remote[42]['schedulable'])
+
+    def test_txt_duplicate_then_new_json_continues_as_update(self):
+        self.remote[55]=account(55);self.queue();self.s.run_one()
+        self.assertEqual(self.v.jobs()[0]['code'],'DEPLOY_BIND_EXISTING_FIRST')
+        r=self.client.post('/api/import',json={'format':'sub2','text':json.dumps(authorization().raw),
+                                              'profile':PROFILE,'update_credentials':True})
+        self.assertEqual(r.json()['updated'],1,r.text)
+        self.queue(staging_verified=False);self.s.run_one()
+        self.assertEqual(self.v.jobs()[0]['state'],'succeeded',self.v.jobs()[0])
+        self.auth.assert_not_called();self.assertFalse(any(c[1]=='/accounts' for c in self.calls))
+        self.assertEqual(self.v.account(self.id)['binding']['cloud_id'],55)
+
+    def test_manual_ambiguous_choice_updates_selected_id_on_retry(self):
+        self.remote={55:account(55),56:account(56)};self.cached();self.queue();self.s.run_one()
+        report=self.s.bindings.report();candidate=report['items'][0]['candidates'][1]
+        self.s.bindings.resolve(self.id,candidate['id'],candidate['fingerprint'],report['connection_revision'])
+        self.queue();self.s.run_one()
+        self.assertEqual(self.v.jobs()[0]['state'],'succeeded',self.v.jobs()[0])
+        self.assertEqual(self.v.account(self.id)['binding']['cloud_id'],candidate['id'])
+        self.assertFalse(any(c[1]=='/accounts' for c in self.calls));self.auth.assert_not_called()
+
+    def test_ignored_credentials_write_never_tests_or_enables(self):
+        self.bind_existing();self.cached()
+        def ignored(path,body,key=None):
+            if path.endswith('apply-oauth-credentials'):
+                self.calls.append(('POST',path,body));return self.cloud_read('/accounts/42')
+            return self.cloud_write(path,body,key)
+        self.write.side_effect=ignored;self.queue();self.s.run_one()
+        self.assertEqual(self.v.jobs()[0]['state'],'unknown');self.probe.assert_not_called()
+        self.assertFalse(self.remote[42]['schedulable'])
+
+    def test_known_401_monitor_failure_uses_imported_json_without_nvt(self):
+        self.bind_existing();self.remote[42]['schedulable']=False
+        from sub2easy.monitor import config_fingerprint
+        self.v.update_account(self.id,status='failed',monitor={'enabled':True,'blocked':True,
+            'last_code':'PROBE_AUTH_401','owned_pause':{'state':'confirmed','baseline':config_fingerprint(self.remote[42])}})
+        r=self.client.post('/api/import',json={'format':'sub2','text':json.dumps(authorization().raw),
+                                              'profile':PROFILE,'update_credentials':True})
+        self.assertEqual(r.json()['updated'],1,r.text)
+        self.queue();self.s.run_one()
+        self.assertEqual(self.v.jobs()[0]['state'],'succeeded');self.auth.assert_not_called()
+
+    def test_unknown_write_new_json_never_clears_pending_mutation(self):
+        self.bind_existing();self.v.update_account(self.id,status='write_unknown',write_intent={'state':'unknown'})
+        r=self.client.post('/api/import',json={'format':'sub2','text':json.dumps(authorization().raw),
+                                              'profile':PROFILE,'update_credentials':True})
+        self.assertEqual(r.json()['failed'],1);self.assertEqual(self.v.account(self.id)['write_intent']['state'],'unknown')
+        self.assertEqual(self.calls,[])
+
     def test_shared_workspace_other_user_is_not_duplicate(self):
-        self.remote[55]=account(55,email='other@example.invalid');self.cached()
+        self.remote[55]=account(55,email='other@example.invalid');self.remote[55]['credentials']['chatgpt_user_id']='other-user';self.cached()
         self.queue();self.s.run_one();self.assertEqual(self.v.jobs()[0]['state'],'succeeded')
 
     def test_failed_probe_no_promote_no_enable_and_retry_no_duplicate(self):
@@ -494,7 +624,7 @@ class DeploymentTests(unittest.TestCase):
             self.s.stop.set()
             return {'groups':[{'id':i} for i in [9001,11,12]],'proxies':[{'id':7}]}
         self.options.side_effect=stop_options;self.queue();self.s.run_one()
-        self.list_client.assert_not_called();self.auth.assert_not_called()
+        self.auth.assert_not_called()
         self.assertEqual(self.calls,[]);self.assertEqual(self.v.jobs()[0]['code'],'DEPLOY_STOPPED')
 
     def test_stop_during_mutation_journal_prevents_unsent_create(self):
@@ -606,9 +736,10 @@ class DeploymentTests(unittest.TestCase):
         def duplicate(*args):
             self.remote[55]=account(55);return authorization()
         self.auth.side_effect=duplicate;self.queue();self.s.run_one()
-        self.assertEqual(self.v.jobs()[0]['code'],'DEPLOY_BIND_EXISTING_FIRST')
-        self.write.assert_not_called();self.auth.assert_called_once()
-        self.queue();self.s.run_one();self.auth.assert_called_once();self.write.assert_not_called()
+        self.assertEqual(self.v.jobs()[0]['code'],'DEPLOYED_AND_ENABLED')
+        self.assertFalse(any(c[1]=='/accounts' for c in self.calls));self.auth.assert_called_once()
+        self.assertEqual(self.v.account(self.id)['binding']['cloud_id'],55)
+        self.queue();self.s.run_one();self.auth.assert_called_once()
 
     def test_create_response_with_invalid_id_is_never_replayed(self):
         self.cached();self.write.return_value={'id':True};self.write.side_effect=None
@@ -741,7 +872,7 @@ class RealHTTPDeploymentTests(unittest.TestCase):
                         job=v.jobs()[0];self.assertEqual(job['state'],'succeeded',job)
                         self.assertTrue(remote[42]['schedulable']);self.assertEqual(remote[42]['group_ids'],[11,12])
                         self.assertEqual(remote[42]['extra'],{'codex_fingerprint_mode':'device'})
-                        self.assertEqual(client.get('/api/status').json()['version'],'0.7.0')
+                        self.assertEqual(client.get('/api/status').json()['version'],'0.7.1')
                         batch=client.get('/api/import/batch').json()
                         self.assertEqual(batch['counts'],{'succeeded':1})
                         self.assertEqual(batch['items'][0]['cloud_id'],42)
