@@ -408,7 +408,9 @@ class DeploymentService:
             code = str(exc) if isinstance(exc,(VaultError,ContractError,ConnectorError)) else 'DEPLOY_READ_FAILED' if isinstance(exc,PreflightError) else 'DEPLOY_INTERNAL_ERROR'
             unknown=bool(dep.get('mutation'))
             state='unknown' if unknown else 'review' if isinstance(exc,ContractError) else 'failed'
-            self._save(aid,dep,state=state,code=code)
+            self._save(aid,dep,state=state,code=code,failure_details={
+                'http_status':getattr(exc,'http_status',None),
+                'cause':getattr(exc,'cause','read_failed' if isinstance(exc,PreflightError) else 'operation_failed')})
             self.vault.update_account(aid,status='unknown' if unknown else 'review' if state=='review' else 'failed')
             self.vault.finish(job['id'],state,code,dep['step'])
 

@@ -15,6 +15,7 @@ from sub2easy.preflight import admin_url
 from sub2easy.sub2_import import parse_sub2
 from sub2easy.vault import VaultError
 from sub2easy.deployment import replaceable_precheck, profile_summary
+from sub2easy.reconciliation import unknown_create
 
 
 class ImportWorkflow:
@@ -184,6 +185,17 @@ class ImportWorkflow:
                 a=accounts[aid]
                 if a:
                     dep=a.get('deployment') or {}
+                    if row.get('intake_state') not in {'failed','conflict'}:
+                        item['can_reconcile_create']=unknown_create(a)
+                        if unknown_create(a):
+                            # A rejected duplicate enqueue has no new job_id; expose
+                            # the original creation phase instead of "材料校验".
+                            item['step']='create'
+                            item['cloud_creation_uncertain']=True
+                            details=dep.get('failure_details') or {}
+                            item['failure_details']={k:details.get(k) for k in ('http_status','cause')}
+                        if dep.get('code')=='RECONCILED_READY_TO_RETRY' and item['state'] in {'failed','unknown','review'}:
+                            item.update(state='failed',code='RECONCILED_READY_TO_RETRY',step='precheck')
                     if dep.get('job_id') and dep.get('job_id')==row.get('job_id'):
                         item['operation']='create' if dep.get('new_account') else 'update_existing'
                         item['matched_existing']=dep.get('matched_existing',False)

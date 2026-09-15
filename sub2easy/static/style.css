@@ -254,3 +254,5 @@ td small { font-size: 12px; color: #64715b; line-height: 1.6; }
 .task-pool-controls{display:flex;align-items:flex-end;flex-wrap:wrap;gap:16px;padding:0 22px 20px}.task-pool-controls label{min-width:150px;margin:0}.task-pool-controls select{display:block;margin-top:7px;min-height:38px}.task-pool-controls .checkbox-label{display:flex;align-items:center;gap:7px;min-width:auto}.task-pool-panel{margin-bottom:18px}
 
 .update-command{white-space:pre-wrap;overflow-wrap:anywhere;padding:14px;background:#eff3eb;border-radius:6px}#nvt-setup-reminder{margin:0 0 20px;align-items:center;gap:14px;flex-wrap:wrap}#update-link{display:inline-block;margin:12px;color:#295c49;text-decoration:underline}
+
+#reconcile-dialog{max-width:850px;width:calc(100vw - 36px);max-height:90vh;overflow:auto}#reconcile-candidates{display:grid;gap:12px}#reconcile-status{white-space:pre-wrap}#backend-version-warning{margin:0;padding:12px 20px}#reconcile-candidates p{overflow-wrap:anywhere}

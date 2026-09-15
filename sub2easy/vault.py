@@ -75,6 +75,14 @@ class VaultError(ValueError):
     pass
 
 
+class CloudWriteError(VaultError):
+    """Retain bounded transport evidence, never arbitrary server error bodies."""
+    def __init__(self, http_status=None, cause='response_unknown'):
+        super().__init__('CLOUD_WRITE_RESULT_UNKNOWN')
+        self.http_status=http_status
+        self.cause=cause
+
+
 class Vault:
     def __init__(self, directory):
         directory = Path(directory)
@@ -281,7 +289,11 @@ class Vault:
         dep=account.get('deployment') or {};m=account.get('monitor') or {}
         if dep.get('mutation') or dep.get('state') in {'unknown','review'}:return None
         known={'INCORRECT_CODE','INVALID_PASSWORD','LOGIN_FAILED','INVALID_CREDENTIALS',
-               'PROBE_AUTH_401','PROBE_FAILED','PROBE_INCOMPLETE','REAUTH_STILL_UNAUTHORIZED'}
+               'CONNECTOR_SESSION_EXPIRED','CONNECTOR_RATE_LIMITED','CONFIGURE_OR_RENEW_COOKIE',
+               'PROBE_AUTH_401','PROBE_FAILED','PROBE_INCOMPLETE','REAUTH_STILL_UNAUTHORIZED',
+               'PROBE_ACCESS_DENIED','PROBE_RATE_LIMITED','PROBE_UPSTREAM_UNAVAILABLE',
+               'PROBE_HTTP_FAILED','PROBE_INVALID_SSE','PROBE_RESPONSE_TOO_LARGE',
+               'MONITOR_FETCH_FAILED','DEPLOY_READ_FAILED','TOKEN_EXPIRED_OR_TOO_CLOSE'}
         code=m.get('last_code') or dep.get('code') or account.get('result_code')
         if code not in known:return None
         owner=m.get('owned_pause') or {};cp=m.get('continuation') or {}
@@ -297,10 +309,13 @@ class Vault:
                 and not account.get('retirement') and not account.get('write_intent')
                 and not m.get('owned_pause') and not m.get('blocked')
                 and dep.get('new_account') is True and dep.get('state')=='failed'
-                and dep.get('step') in {'precheck','create'} and not dep.get('mutation')
+                and dep.get('step') in {'precheck','authorize','create'} and not dep.get('mutation')
                 and not dep.get('cloud_id') and not dep.get('binding')
                 and dep.get('code') in {'DEPLOY_BIND_EXISTING_FIRST','MULTIPLE_CLOUD_MATCHES',
-                                       'CLOUD_MATCH_CONFLICT','SELECTED_GROUP_UNAVAILABLE','SELECTED_PROXY_UNAVAILABLE'})
+                                       'CLOUD_MATCH_CONFLICT','SELECTED_GROUP_UNAVAILABLE','SELECTED_PROXY_UNAVAILABLE',
+                                       'DEPLOY_READ_FAILED','INCORRECT_CODE','INVALID_PASSWORD','LOGIN_FAILED',
+                                       'INVALID_CREDENTIALS','LOGIN_MATERIAL_MISSING','TOKEN_EXPIRED_OR_TOO_CLOSE',
+                                       'CONNECTOR_SESSION_EXPIRED','CONNECTOR_RATE_LIMITED','CONFIGURE_OR_RENEW_COOKIE'})
 
     def import_sub2(self, batch, profile, update_credentials=False):
         """Same email-key as text intake; changes never write to the cloud."""
@@ -323,13 +338,13 @@ class Vault:
                            for expected in identities):
                         results.append({'index':item.index,'state':'conflict','code':'SUB2_IDENTITY_CONFLICT','account_id':aid})
                         continue
-                    if (old.get('authorization') == auth or
+                    replacement=self.credential_replacement(aid,old,row[2],update_credentials)
+                    unbound_replacement=self.replaceable_unbound_import(aid,old,row[2],update_credentials)
+                    if not replacement and not unbound_replacement and (old.get('authorization') == auth or
                             (not old.get('authorization') and old.get('last_applied_auth_digest') and
                              hmac.compare_digest(old['last_applied_auth_digest'],self.authorization_digest(auth)))):
                         results.append({'index':item.index,'state':'duplicate','code':'SUB2_ALREADY_IMPORTED','account_id':aid})
                         continue
-                    replacement=self.credential_replacement(aid,old,row[2],update_credentials)
-                    unbound_replacement=self.replaceable_unbound_import(aid,old,row[2],update_credentials)
                     if not replacement and not unbound_replacement and (self._import_busy(aid,old,allow_completed=True) or row[2] in {'review','unknown','write_unknown'}):
                         results.append({'index':item.index,'state':'conflict','code':'SUB2_ACCOUNT_BUSY','account_id':aid})
                         continue
@@ -414,12 +429,14 @@ class Vault:
                 secrets = (*connection_secrets, *_secret_values(a))
                 deployment = a.get('deployment') or {}
                 monitor = a.get('monitor') or {}
+                from sub2easy.reconciliation import unknown_create
                 result.append({
                     "id": account_id, "label": a["login"]["account"],
                     "status": a["status"], "revision": a["revision"], "updated": a["updated"],
                     "imported_at": a.get("imported_at"),
                     "binding": _public_metadata(a["binding"], secrets), "profile": _public_metadata(a["profile"], secrets),
                     "has_result": a.get("raw_result") is not None,
+                    "can_reconcile_create": unknown_create(a),
                     "validated": a.get("authorization") is not None,
                     "result_code": _diagnostic(a.get("result_code", ""), secrets),
                     "has_login_material": has_login_material(a['login']),

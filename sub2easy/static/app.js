@@ -16,6 +16,7 @@ let accountRenderKey='',jobRenderKey='';
 let usageLoadTimer=null;
 const usageAttempts=new Map();
 const usageLoadingIds=new Set();
+let reconciliationReport=null;
 let importBatch=null,importBatchRequest=0,inlineSubmit=null,importSubmitBusy=false;
 const selected = new Set();
 const names = {pool:'号池总览',bindings:'绑定处理中心',cloud:'全站账号',import:'批量导入',jobs:'任务中心',monitor:'账号监控',settings:'连接与模板'};
@@ -31,6 +32,13 @@ const statuses = {
   active:['已上线','success'],retired:['已移测试组 · 不再修复',''],
 };
 const messages = {
+  RECONCILE_NOT_CREATE_UNKNOWN:'该记录不是待核对的未知创建；请刷新当前状态。',
+  RECONCILE_CHANGED:'核对期间账号或连接已变化，请重新读取候选。',
+  RECONCILE_REPORT_EXPIRED:'核对结果已过期或不可用，请重新读取。',
+  RECONCILE_MATCH_EXISTS:'云端发现相关候选，不能按不存在重新创建，请核对原账号。',
+  CONFIRM_RECONCILE:'请明确确认绑定或解除创建阻塞。',
+  CONFIRM_RECREATE_RISK:'请先核实原请求已结束且未创建，并确认重复创建风险。',
+  RECONCILED_READY_TO_RETRY:'云端核对已完成，可以点“重试本项”继续；没有重新登录或创建账号。',
   UPDATE_CHECK_RUNNING:'版本检查正在进行，请稍候。',
   UPDATE_CHECK_FAILED:'无法读取 GitHub 版本信息，请检查网络后重试。',
   UPDATE_RATE_LIMITED:'GitHub 版本接口限流，稍后重试；无需在这里填写 GitHub Token。',
@@ -192,6 +200,7 @@ async function api(path, data, raw=false) {
 }
 async function action(button, fn) { if(button&&busyButtons.has(button))return;if(button){busyButtons.add(button);button.disabled=true;button.setAttribute('aria-busy','true');}foregroundActions++;try{await fn();}catch(e){toast(e.message);}finally{foregroundActions--;if(button){busyButtons.delete(button);button.disabled=false;button.removeAttribute('aria-busy');}if(unlocked)updateSelection();} }
 function clearLocalSession(){
+  reconciliationReport=null;$('reconcile-candidates').replaceChildren();$('reconcile-status').textContent='';
   $('nvt-setup-reminder').hidden=true;$('update-command').hidden=true;$('update-command').textContent='';
   sessionEpoch++;unlocked=false;state=null;selected.clear();usageById.clear();usageRevision=null;deploymentDraft=null;
   usageAttempts.clear();usageLoadingIds.clear();clearTimeout(usageLoadTimer);
@@ -349,6 +358,7 @@ function renderAccounts(){
     const hasNewAuth=a.validated&&a.status==='authorized';
     const deploy=button(a.status==='retired'?'已移测试组':hasNewAuth&&a.binding?'更新原账号 #'+a.binding.cloud_id:a.deployment?.state==='complete'?'已完成上线':a.deployment?.state&&a.deployment.state!=='complete'?'继续导入':'导入服务器并上线',()=>openDeployment([a.id]));deploy.disabled=pending||blocked||(a.deployment?.state==='complete'&&!hasNewAuth);
     deploy.title=pending?'已有任务执行中':blocked?'先核对失败原因，未知写入不能重复提交':'授权、服务器写入、验号、移组和启用会自动完成';row.append(deploy);
+    if(a.can_reconcile_create)row.append(button('核对云端创建结果',()=>openCreateReconciliation(a.id)));
     const more=document.createElement('details');more.className='row-more';const summary=text('summary','更多');summary.setAttribute('aria-label',a.label+'的更多操作');more.append(summary);
     const menu=document.createElement('div');menu.className='row-more-menu';more.append(menu);
     const auth=button('仅获取授权，不写服务器',()=>authorize([a.id]));auth.disabled=pending||!a.has_login_material||blocked;menu.append(auth);
@@ -524,7 +534,7 @@ async function writeCloud(a){
 }
 async function downloadResult(a){const yes=await confirmDialog('导出授权结果','导出的 JSON 包含 OAuth 凭据，下载后为明文文件。它只下载到本机，不会上传其他服务。');if(!yes)return;const response=await api(`accounts/${a.id}/export`,undefined,true);const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`sub2-${a.id.slice(0,8)}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);}
 async function boot(){
-  try{const status=await api('status');$('unlock-submit').disabled=false;$('runtime-version').textContent=`v${status.version} · 并行任务池`;$('deploy-selected').title=status.features?.includes('server_deploy')?'服务器导入已加载':'后台版本尚未加载服务器导入';initialized=status.initialized;unlocked=status.unlocked;$('unlock-title').textContent=initialized?'解锁工作空间':'建立你的本地凭据库';$('unlock-description').textContent=initialized?'输入主密码，解锁本机加密凭据库。':'设置主密码，加密账号材料、Cookie 和授权结果。';$('unlock-submit').textContent=initialized?'解锁 →':'创建凭据库 →';$('confirm-label').hidden=initialized;$('confirm-password').hidden=initialized;$('confirm-password').required=!initialized;$('lock-screen').hidden=unlocked;if(unlocked){await refresh(true);const saved=sessionStorage.getItem('s2e-page');if(names[saved])goto(saved);}}catch(e){$('unlock-error').textContent=e.message;$('unlock-submit').disabled=true;}
+  try{const status=await api('status');showBackendVersion(status.version);$('unlock-submit').disabled=false;$('runtime-version').textContent=`v${status.version} · 并行任务池`;$('deploy-selected').title=status.features?.includes('server_deploy')?'服务器导入已加载':'后台版本尚未加载服务器导入';initialized=status.initialized;unlocked=status.unlocked;$('unlock-title').textContent=initialized?'解锁工作空间':'建立你的本地凭据库';$('unlock-description').textContent=initialized?'输入主密码，解锁本机加密凭据库。':'设置主密码，加密账号材料、Cookie 和授权结果。';$('unlock-submit').textContent=initialized?'解锁 →':'创建凭据库 →';$('confirm-label').hidden=initialized;$('confirm-password').hidden=initialized;$('confirm-password').required=!initialized;$('lock-screen').hidden=unlocked;if(unlocked){await refresh(true);const saved=sessionStorage.getItem('s2e-page');if(names[saved])goto(saved);}}catch(e){$('unlock-error').textContent=e.message;$('unlock-submit').disabled=true;}
 }
 document.querySelectorAll('[data-page]').forEach(n=>n.onclick=()=>goto(n.dataset.page));document.querySelectorAll('[data-go]').forEach(n=>n.onclick=()=>goto(n.dataset.go));
 $('unlock-form').onsubmit=event=>{event.preventDefault();action($('unlock-submit'),async()=>{const password=$('master-password').value;if(!initialized&&password!==$('confirm-password').value){$('unlock-error').textContent='两次主密码不一致。';return;}try{await api('unlock',{password,setup:!initialized});initialized=true;unlocked=true;$('master-password').value='';$('confirm-password').value='';$('unlock-error').textContent='';$('lock-screen').hidden=true;await refresh(true);}catch(e){$('unlock-error').textContent=e.message;}});};
@@ -578,10 +588,11 @@ function renderImportBatch(){
   const local=rows.filter(r=>r.state==='local_saved').length;
   $('import-batch-deploy').hidden=!local;
   $('import-batch-summary').textContent=`共 ${rows.length} 项 · 本地待上传 ${local} · 已完成 ${done} · 排队/执行中 ${running} · 失败/待核对 ${failed} · ${importBatch.instance?'目标 '+importBatch.instance:'尚未上传服务器，请确认上方模板后点右侧上传按钮'} · 模板 ${importBatch.profile.profile_id} v${importBatch.profile.revision}`;
-  for(const r of rows){const tr=document.createElement('tr');tr.append(text('td',`第 ${r.index} 项 · ${r.label||'输入有误/重复项'}`),text('td',r.cloud_id?'#'+r.cloud_id:'尚未创建'),text('td',deployStages[r.step]||r.step||'材料校验'));
+  for(const r of rows){const tr=document.createElement('tr');tr.append(text('td',`第 ${r.index} 项 · ${r.label||'输入有误/重复项'}`),text('td',r.cloud_id?'#'+r.cloud_id:r.cloud_creation_uncertain?'创建结果待核对':'尚未创建'),text('td',deployStages[r.step]||r.step||'材料校验'));
     const result=document.createElement('td');result.className='inline-result';
     const label=r.state==='local_saved'?'已保存本地 · 尚未上传':r.state==='succeeded'?'已在服务器上线':r.state==='already_complete'?'原任务已完成':r.state==='queued'?'已保存本地，等待上传':r.state==='running'?'正在导入服务器':r.state==='skipped'?'重复项，已跳过':errorText(r.code);
     result.append(text('span',label));tr.append(result);
+    if(r.failure_details?.http_status)result.append(text('small','上次请求 HTTP '+r.failure_details.http_status+'（未保存服务端敏感正文）'));
     if(r.operation==='update_existing')result.append(text('small',`更新原账号 #${r.cloud_id||'—'} · 保留云端原分组/代理/指纹 · 不创建新号`));
     if(r.execution_profile&&r.operation!=='update_existing'){const p=r.execution_profile;result.append(text('small',`执行模板 ${p.profile_id} v${p.revision} · 隔离 #${p.staging_group_id} → 生产 ${(p.target_group_ids||[]).map(id=>'#'+id).join('、')} · 代理 ${p.proxy_id?'#'+p.proxy_id:'直连'}`));}
     const e=r.precheck_error;if(e){const missing=[e.missing_staging_group_id?'隔离组 #'+e.missing_staging_group_id:'',...(e.missing_target_group_ids||[]).map(id=>'生产组 #'+id),e.missing_proxy_id?'代理 #'+e.missing_proxy_id:''].filter(Boolean);if(missing.length)result.append(text('small','当前不可用：'+missing.join('、'),'error-text'));}
@@ -589,7 +600,8 @@ function renderImportBatch(){
     const ops=document.createElement('td');
     if(r.job_id&&['queued','running'].includes(r.state)){const b=button(r.cancel_requested?'停止已请求':'停止本项',async()=>{await api(`jobs/${r.job_id}/cancel`,{});await loadImportBatch();});b.disabled=!!r.cancel_requested;ops.append(b);}
     if(['DEPLOY_BIND_EXISTING_FIRST','MULTIPLE_CLOUD_MATCHES','CLOUD_MATCH_CONFLICT'].includes(r.code))ops.append(button('查看并选择原账号',()=>goto('bindings')));
-    if(r.account_id&&['failed','cancelled'].includes(r.state)&&!['failed','conflict'].includes(r.intake_state))ops.append(button('重试本项',async()=>{importBatch=await api(`import/batch/${importBatch.id}/retry`,{indices:[r.index]});renderImportBatch();}));
+    if(r.can_reconcile_create)ops.append(button('核对云端创建结果',()=>openCreateReconciliation(r.account_id)));
+    if(!r.can_reconcile_create&&r.account_id&&['failed','cancelled'].includes(r.state)&&!['failed','conflict'].includes(r.intake_state))ops.append(button('重试本项',async()=>{importBatch=await api(`import/batch/${importBatch.id}/retry`,{indices:[r.index]});renderImportBatch();}));
     tr.append(ops);$('import-batch-rows').append(tr);
   }
 }
@@ -735,4 +747,40 @@ $('update-check').onclick=()=>action($('update-check'),async()=>{
     if(r.available&&r.install_mode==='git'){$('update-command').textContent=r.update_command;$('update-command').hidden=false;}
     else if(r.available)$('update-status').textContent+='。当前为wheel或ZIP安装：先备份数据，安装新版wheel或另建git clone，继续使用原data-dir。';
   }catch(e){$('update-status').textContent=e.message;}
+});
+
+function showBackendVersion(version){
+ const mismatch=version!=='0.7.2';$('backend-version-warning').hidden=!mismatch;
+ $('backend-version-warning').textContent=mismatch?`页面版本 v0.7.2，运行后端 v${version}。后台尚未加载最新修复；不要反复导入，请在任务空闲时更新并重启同一数据目录。`:'';
+}
+async function openCreateReconciliation(aid){
+ reconciliationReport=null;$('reconcile-candidates').replaceChildren();$('reconcile-absent').hidden=true;
+ $('reconcile-original-finished').checked=false;$('reconcile-duplicate-risk').checked=false;
+ $('reconcile-status').textContent='正在完整读取云端候选（不重登、不创建、不写入云端）…';$('reconcile-dialog').showModal();
+ const epoch=sessionEpoch;
+ try{
+  const report=await api(`accounts/${aid}/reconcile-create`,{});
+  if(epoch!==sessionEpoch||!unlocked||!$('reconcile-dialog').open)return;
+  reconciliationReport=report;
+  $('reconcile-status').textContent=report.kind==='not_found'?'完整读取暂未发现候选，请核实服务端原请求结果。':`找到 ${report.candidates.length} 个相关候选，核对邮箱、用户ID、workspace与配置后选择。`;
+  $('reconcile-absent').hidden=report.kind!=='not_found';
+  for(const c of report.candidates){
+   const card=document.createElement('div');card.className='candidate-card';
+   card.append(text('strong',`#${c.id} · ${c.name||c.email||'无名称'}`),text('p',`邮箱 ${c.email||'缺失'} · UID ${c.user_id||'缺失'} · workspace ${c.workspace_id||'缺失'}`,'field-help'),text('p',`状态 ${c.status} · 调度 ${c.schedulable} · 分组 ${(c.group_ids||[]).join(', ')} · 代理 ${c.proxy_id||'直连'}`,'field-help'));
+   if(c.conflicts.length)card.append(text('p',c.conflicts.map(errorText).join('；'),'error-text'));
+   const choose=button('核对并绑定此原账号',()=>resolveCreate({action:'bind_existing',cloud_id:c.id}));choose.disabled=!c.eligible;card.append(choose);$('reconcile-candidates').append(card);
+  }
+ }catch(e){$('reconcile-status').textContent=e.message+'；读取失败不等于云端不存在，未解除阻塞。';}
+}
+async function resolveCreate(data){
+ if(!reconciliationReport)throw new Error('请先重新读取核对结果。');
+ const report=reconciliationReport;
+ const result=await api(`accounts/${report.account_id}/resolve-create`,{...data,report_id:report.id,confirm_resolution:true});
+ reconciliationReport=null;$('reconcile-dialog').close();await refresh();await loadImportBatch();
+ toast(result.cloud_id?`已绑定原账号 #${result.cloud_id}，请点“重试本项”继续，不再创建。`:'已记录人工核对，可以重试创建；重试前仍会重新去重。');
+}
+$('reconcile-close').onclick=()=>{$('reconcile-dialog').close();reconciliationReport=null;};
+$('reconcile-allow-create').onclick=()=>action($('reconcile-allow-create'),async()=>{
+ if(!$('reconcile-original-finished').checked||!$('reconcile-duplicate-risk').checked)throw new Error('请先完成两项人工核对确认。');
+ await resolveCreate({action:'allow_create',confirm_original_request_finished:true,accept_duplicate_risk:true});
 });

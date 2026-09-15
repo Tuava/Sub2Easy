@@ -30,7 +30,7 @@ from sub2easy.lifecycle import (
 )
 from sub2easy.nvtokens import ConnectorError, NVTConnector, export_document, parse_response, session_value
 from sub2easy.preflight import Client, PreflightError, admin_url, summarize, unwrap
-from sub2easy.vault import Vault, VaultError
+from sub2easy.vault import Vault, VaultError, CloudWriteError
 from sub2easy.monitor import AccountMonitor, config_fingerprint
 from sub2easy.binding import BindingCenter, metadata
 from sub2easy.deployment import DeploymentService
@@ -42,6 +42,7 @@ from sub2easy.task_pool import TaskPool
 from sub2easy.retirement import RetirementService
 from sub2easy.runtime import default_data_dir, private_lock_file, write_private_launcher
 from sub2easy import updater
+from sub2easy.reconciliation import CreateReconciliation
 
 
 STATIC = Path(__file__).with_name("static")
@@ -70,6 +71,7 @@ class DesktopService:
         self.tasks = TaskPool(self)
         self.vault.runtime_busy = self.tasks.busy
         self.retirement = RetirementService(self)
+        self.reconciliation = CreateReconciliation(self)
 
     def start(self):
         self.thread = threading.Thread(target=self._loop, daemon=True, name="sub2easy-dispatch")
@@ -260,17 +262,17 @@ class DesktopService:
                                    json=body, headers=headers) as response:
                     if not 200 <= response.status_code < 300:
                         # Any non-success mutation can be partially applied by the remote service.
-                        raise VaultError("CLOUD_WRITE_RESULT_UNKNOWN")
+                        raise CloudWriteError(response.status_code,'http_error')
                     raw = bytearray()
                     for chunk in response.iter_bytes():
                         raw.extend(chunk)
                         if len(raw) > 8 * 1024 * 1024:
-                            raise VaultError("CLOUD_WRITE_RESULT_UNKNOWN")
+                            raise CloudWriteError(response.status_code,'response_too_large')
                     return unwrap(json.loads(raw))
         except (httpx.HTTPError, ValueError) as exc:
             if isinstance(exc, VaultError):
                 raise
-            raise VaultError("CLOUD_WRITE_RESULT_UNKNOWN") from None
+            raise CloudWriteError(cause='network_or_invalid_response') from None
 
     def sync(self):
         setting = self.cloud()
@@ -718,6 +720,14 @@ def create_app(directory, port=8765, token=None, connector=None, start_worker=Tr
     async def retry_import_batch(request_id: str, request: Request):
         data=await body_object(request)
         return await exclusive(service.import_workflow.retry,request_id,data.get('indices'))
+
+    @app.post('/api/accounts/{account_id}/reconcile-create')
+    async def reconcile_create(account_id: str):
+        return await exclusive(service.reconciliation.inspect,account_id)
+
+    @app.post('/api/accounts/{account_id}/resolve-create')
+    async def resolve_create(account_id: str, request: Request):
+        return await exclusive(service.reconciliation.resolve,account_id,await body_object(request))
 
     @app.post("/api/jobs/cancel")
     async def cancel():
